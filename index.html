@@ -41,7 +41,6 @@
             width: 100% !important;
         }
 
-        /* ランキング用コンテナを縦に少し広げてスマホで見やすく調整 */
         .chart-container.ranking-container {
             min-height: 480px;
         }
@@ -72,7 +71,7 @@
     <div class="dashboard-grid" id="dashboardArea" style="display: none;">
         <div class="chart-container full-width ranking-container">
             <h3>
-                <span>👑 獲得売上ランキング（横の数字は販売個数）</span>
+                <span>👑 獲得売上ランキング（金額・販売個数）</span>
                 <select id="rankMonthFilter" class="month-select">
                     <option value="all">総合（全期間）</option>
                 </select>
@@ -107,7 +106,6 @@
     const dropArea = document.getElementById('dropArea');
     const monthFilter = document.getElementById('rankMonthFilter');
     
-    // グラフオブジェクトを一括管理
     let charts = {
         ranking: null,
         trend: null,
@@ -155,18 +153,13 @@
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length <= 1) return alert('データ形式が正しくありません。');
 
-        let totalSales = 0; 
-        let totalQty = 0;
-        globalProductTotals = {}; 
-        monthlyProductTotals = {};
-        const dateData = {}; 
-        const categoryData = {};
+        let totalSales = 0; let totalQty = 0;
+        globalProductTotals = {}; monthlyProductTotals = {};
+        const dateData = {}; const categoryData = {};
         let rawDates = [];
 
         for (let i = 1; i < lines.length; i++) {
             const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-            
-            // 安全対策：空行や不足行の完全スキップ
             if (!row || row.length < 3 || !row[0] || !row[2]) continue;
 
             const dateStr = row[0].trim();
@@ -179,8 +172,7 @@
             if (isNaN(dateObj.getTime())) continue;
             
             const qty = estimateQty(sales);
-            totalSales += sales; 
-            totalQty += qty;
+            totalSales += sales; totalQty += qty;
             rawDates.push(dateObj);
 
             if (!globalProductTotals[title]) globalProductTotals[title] = { sales: 0, qty: 0 };
@@ -203,10 +195,8 @@
         const startDate = rawDates[0];
         const endDate = rawDates[rawDates.length - 1];
         
-        const filledDateLabels = []; 
-        const filledDateValues = [];
-        const weekdaySales = Array(7).fill(0); 
-        const weekdayCounts = Array(7).fill(0);
+        const filledDateLabels = []; const filledDateValues = [];
+        const weekdaySales = Array(7).fill(0); const weekdayCounts = Array(7).fill(0);
         const monthlySummary = {}; 
 
         let curr = new Date(startDate);
@@ -214,24 +204,20 @@
             const dStr = `${curr.getFullYear()}/${curr.getMonth()+1}/${curr.getDate()}`;
             const mKey = `${curr.getFullYear()}/${String(curr.getMonth()+1).padStart(2, '0')}`;
             const s = dateData[dStr] || 0;
-            filledDateLabels.push(dStr); 
-            filledDateValues.push(s);
-            weekdaySales[curr.getDay()] += s; 
-            weekdayCounts[curr.getDay()] += 1;
+            filledDateLabels.push(dStr); filledDateValues.push(s);
+            weekdaySales[curr.getDay()] += s; weekdayCounts[curr.getDay()] += 1;
             monthlySummary[mKey] = (monthlySummary[mKey] || 0) + s;
             curr.setDate(curr.getDate() + 1);
         }
 
         const weekdayAverages = weekdaySales.map((s, i) => weekdayCounts[i] > 0 ? Math.round(s / weekdayCounts[i]) : 0);
 
-        // 画面要素の表示
         document.getElementById('summaryArea').style.display = 'grid';
         document.getElementById('dashboardArea').style.display = 'grid';
         document.getElementById('totalSales').textContent = `¥${totalSales.toLocaleString()}`;
         document.getElementById('totalQty').textContent = `${totalQty.toLocaleString()}個`;
         document.getElementById('analysisPeriod').textContent = `${startDate.toLocaleDateString()}～${endDate.toLocaleDateString()}`;
 
-        // 月別フィルターの組み立て
         monthFilter.innerHTML = '<option value="all">総合（全期間）</option>';
         Object.keys(monthlyProductTotals).sort().forEach(m => {
             const opt = document.createElement('option'); opt.value = m; opt.textContent = m; monthFilter.appendChild(opt);
@@ -240,7 +226,6 @@
         const sortedGlobal = Object.keys(globalProductTotals).map(k => ({ t: k, s: globalProductTotals[k].sales })).sort((a, b) => b.s - a.s);
         if(sortedGlobal.length > 0) document.getElementById('topProduct').textContent = sortedGlobal[0].t;
 
-        // すべてのグラフを新しく一元描画
         renderAllCharts(filledDateLabels, filledDateValues, monthlySummary, weekdayAverages, categoryData);
         updateRankingChart('all');
     }
@@ -248,17 +233,17 @@
     function updateRankingChart(mode) {
         let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
         
-        // 上位15件を抽出
         const sorted = Object.keys(targetData).map(k => ({ 
             title: k, 
             sales: targetData[k].sales, 
             qty: targetData[k].qty 
         })).sort((a, b) => b.sales - a.sales).slice(0, 15);
 
-        const labels = sorted.map(p => `${p.title} (${p.qty}個)`);
+        // ラベルはシンプルに「タイトルのみ」にしてグラフをスッキリさせます
+        const labels = sorted.map(p => p.title);
         const dataSales = sorted.map(p => p.sales);
+        const dataQtys = sorted.map(p => p.qty);
 
-        // 古いグラフを確実に一度破棄する（エラー防止ガード）
         if (charts.ranking) {
             charts.ranking.destroy();
             charts.ranking = null;
@@ -281,7 +266,20 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    // 【安全・確実な金額＆個数表示】ツールチップを常に最前面に全表示する特殊設定
+                    tooltip: {
+                        enabled: true,
+                        trigger: 'axis',
+                        callbacks: {
+                            label: function(context) {
+                                const index = context.dataIndex;
+                                const amt = dataSales[index].toLocaleString();
+                                const qty = dataQtys[index];
+                                return ` 売上: ¥${amt} / 数量: ${qty}個`;
+                            }
+                        }
+                    }
                 },
                 scales: {
                     x: { beginAtZero: true },
@@ -297,22 +295,19 @@
     }
 
     function renderAllCharts(dateLabels, dateValues, monthlyData, weekdayAverages, categoryData) {
-        // すでに作成済みの古いインスタンスがあれば確実に全て消去
         Object.keys(charts).forEach(key => { 
-            if (charts[key]) {
+            if (charts[key] && key !== 'ranking') {
                 charts[key].destroy();
                 charts[key] = null;
             }
         });
 
-        // 1. 日別推移
         charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
             type: 'line',
             data: { labels: dateLabels, datasets: [{ label: '日別売上', data: dateValues, borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.05)', borderWidth: 1.5, fill: true, tension: 0.1, pointRadius: 1 }] },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
 
-        // 2. 月別売上
         const mLabels = Object.keys(monthlyData).sort();
         charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
             type: 'bar',
@@ -320,14 +315,12 @@
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
 
-        // 3. 曜日別平均
         charts.weekday = new Chart(document.getElementById('weekdayChart').getContext('2d'), {
             type: 'bar',
             data: { labels: ['日','月','火','水','木','金','土'], datasets: [{ label: '平均売上', data: weekdayAverages, backgroundColor: ['#e74c3c','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#3498db'], borderRadius: 4 }] },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
 
-        // 4. カテゴリ別
         const cLabels = Object.keys(categoryData);
         charts.category = new Chart(document.getElementById('categoryChart').getContext('2d'), {
             type: 'doughnut',
