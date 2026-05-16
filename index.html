@@ -41,12 +41,12 @@
             width: 100% !important;
         }
 
-        /* ランキンググラフに十分な高さを確保 */
-        .chart-container.ranking-height {
-            min-height: 450px;
+        /* ランキング用コンテナを縦に少し広げてスマホで見やすく調整 */
+        .chart-container.ranking-container {
+            min-height: 480px;
         }
-        .chart-container.ranking-height canvas {
-            max-height: 400px;
+        .chart-container.ranking-container canvas {
+            max-height: 420px;
         }
         
         .month-select { padding: 4px 8px; font-size: 12px; border-radius: 4px; border: 1px solid #bdc3c7; background-color: #fff; color: #2c3e50; cursor: pointer; }
@@ -70,7 +70,7 @@
     </div>
 
     <div class="dashboard-grid" id="dashboardArea" style="display: none;">
-        <div class="chart-container full-width ranking-height">
+        <div class="chart-container full-width ranking-container">
             <h3>
                 <span>👑 獲得売上ランキング（横の数字は販売個数）</span>
                 <select id="rankMonthFilter" class="month-select">
@@ -107,7 +107,15 @@
     const dropArea = document.getElementById('dropArea');
     const monthFilter = document.getElementById('rankMonthFilter');
     
-    let charts = {};
+    // グラフオブジェクトを一括管理
+    let charts = {
+        ranking: null,
+        trend: null,
+        month: null,
+        weekday: null,
+        category: null
+    };
+    
     let globalProductTotals = {};
     let monthlyProductTotals = {};
 
@@ -157,7 +165,9 @@
 
         for (let i = 1; i < lines.length; i++) {
             const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-            if (!row || row.length < 3) continue;
+            
+            // 安全対策：空行や不足行の完全スキップ
+            if (!row || row.length < 3 || !row[0] || !row[2]) continue;
 
             const dateStr = row[0].trim();
             const title = row[1] ? row[1].replace(/^"|"$/g, '').trim() : '不明';
@@ -187,7 +197,7 @@
             categoryData[category] = (categoryData[category] || 0) + sales;
         }
 
-        if (rawDates.length === 0) return alert('データが見つかりませんでした。');
+        if (rawDates.length === 0) return alert('有効なデータが見つかりませんでした。');
 
         rawDates.sort((a, b) => a - b);
         const startDate = rawDates[0];
@@ -214,12 +224,14 @@
 
         const weekdayAverages = weekdaySales.map((s, i) => weekdayCounts[i] > 0 ? Math.round(s / weekdayCounts[i]) : 0);
 
+        // 画面要素の表示
         document.getElementById('summaryArea').style.display = 'grid';
         document.getElementById('dashboardArea').style.display = 'grid';
         document.getElementById('totalSales').textContent = `¥${totalSales.toLocaleString()}`;
         document.getElementById('totalQty').textContent = `${totalQty.toLocaleString()}個`;
         document.getElementById('analysisPeriod').textContent = `${startDate.toLocaleDateString()}～${endDate.toLocaleDateString()}`;
 
+        // 月別フィルターの組み立て
         monthFilter.innerHTML = '<option value="all">総合（全期間）</option>';
         Object.keys(monthlyProductTotals).sort().forEach(m => {
             const opt = document.createElement('option'); opt.value = m; opt.textContent = m; monthFilter.appendChild(opt);
@@ -228,6 +240,7 @@
         const sortedGlobal = Object.keys(globalProductTotals).map(k => ({ t: k, s: globalProductTotals[k].sales })).sort((a, b) => b.s - a.s);
         if(sortedGlobal.length > 0) document.getElementById('topProduct').textContent = sortedGlobal[0].t;
 
+        // すべてのグラフを新しく一元描画
         renderAllCharts(filledDateLabels, filledDateValues, monthlySummary, weekdayAverages, categoryData);
         updateRankingChart('all');
     }
@@ -235,6 +248,7 @@
     function updateRankingChart(mode) {
         let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
         
+        // 上位15件を抽出
         const sorted = Object.keys(targetData).map(k => ({ 
             title: k, 
             sales: targetData[k].sales, 
@@ -244,10 +258,83 @@
         const labels = sorted.map(p => `${p.title} (${p.qty}個)`);
         const dataSales = sorted.map(p => p.sales);
 
-        if (charts.ranking) charts.ranking.destroy();
+        // 古いグラフを確実に一度破棄する（エラー防止ガード）
+        if (charts.ranking) {
+            charts.ranking.destroy();
+            charts.ranking = null;
+        }
 
-        charts.ranking = new Chart(document.getElementById('rankingChart').getContext('2d'), {
+        const ctx = document.getElementById('rankingChart').getContext('2d');
+        charts.ranking = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: labels,
-                datasets:
+                datasets: [{
+                    label: '売上金額',
+                    data: dataSales,
+                    backgroundColor: '#f39c12',
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { beginAtZero: true },
+                    y: {
+                        ticks: {
+                            autoSkip: false,
+                            font: { size: 11 }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderAllCharts(dateLabels, dateValues, monthlyData, weekdayAverages, categoryData) {
+        // すでに作成済みの古いインスタンスがあれば確実に全て消去
+        Object.keys(charts).forEach(key => { 
+            if (charts[key]) {
+                charts[key].destroy();
+                charts[key] = null;
+            }
+        });
+
+        // 1. 日別推移
+        charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: dateLabels, datasets: [{ label: '日別売上', data: dateValues, borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.05)', borderWidth: 1.5, fill: true, tension: 0.1, pointRadius: 1 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        // 2. 月別売上
+        const mLabels = Object.keys(monthlyData).sort();
+        charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: mLabels, datasets: [{ label: '月別売上', data: mLabels.map(m => monthlyData[m]), backgroundColor: '#9b59b6', borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        // 3. 曜日別平均
+        charts.weekday = new Chart(document.getElementById('weekdayChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: ['日','月','火','水','木','金','土'], datasets: [{ label: '平均売上', data: weekdayAverages, backgroundColor: ['#e74c3c','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#3498db'], borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        // 4. カテゴリ別
+        const cLabels = Object.keys(categoryData);
+        charts.category = new Chart(document.getElementById('categoryChart').getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: cLabels, datasets: [{ data: cLabels.map(c => categoryData[c]), backgroundColor: ['#2ecc71', '#e67e22'] }] },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+</script>
+</body>
+</html>
