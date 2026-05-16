@@ -41,9 +41,12 @@
             width: 100% !important;
         }
 
-        /* ランキング用グラフは項目が多い場合に備えて少し高さを出す */
-        #rankingChart {
-            min-height: 400px;
+        /* ランキンググラフに十分な高さを確保 */
+        .chart-container.ranking-height {
+            min-height: 450px;
+        }
+        .chart-container.ranking-height canvas {
+            max-height: 400px;
         }
         
         .month-select { padding: 4px 8px; font-size: 12px; border-radius: 4px; border: 1px solid #bdc3c7; background-color: #fff; color: #2c3e50; cursor: pointer; }
@@ -67,7 +70,7 @@
     </div>
 
     <div class="dashboard-grid" id="dashboardArea" style="display: none;">
-        <div class="chart-container full-width">
+        <div class="chart-container full-width ranking-height">
             <h3>
                 <span>👑 獲得売上ランキング（横の数字は販売個数）</span>
                 <select id="rankMonthFilter" class="month-select">
@@ -144,9 +147,12 @@
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length <= 1) return alert('データ形式が正しくありません。');
 
-        let totalSales = 0; totalQty = 0;
-        globalProductTotals = {}; monthlyProductTotals = {};
-        const dateData = {}; const categoryData = {};
+        let totalSales = 0; 
+        let totalQty = 0;
+        globalProductTotals = {}; 
+        monthlyProductTotals = {};
+        const dateData = {}; 
+        const categoryData = {};
         let rawDates = [];
 
         for (let i = 1; i < lines.length; i++) {
@@ -163,7 +169,85 @@
             if (isNaN(dateObj.getTime())) continue;
             
             const qty = estimateQty(sales);
-            totalSales += sales; totalQty += qty;
+            totalSales += sales; 
+            totalQty += qty;
             rawDates.push(dateObj);
 
-            if (!globalProductTotals[title])
+            if (!globalProductTotals[title]) globalProductTotals[title] = { sales: 0, qty: 0 };
+            globalProductTotals[title].sales += sales;
+            globalProductTotals[title].qty += qty;
+
+            const mKey = `${dateObj.getFullYear()}年${String(dateObj.getMonth() + 1).padStart(2, '0')}月`;
+            if (!monthlyProductTotals[mKey]) monthlyProductTotals[mKey] = {};
+            if (!monthlyProductTotals[mKey][title]) monthlyProductTotals[mKey][title] = { sales: 0, qty: 0 };
+            monthlyProductTotals[mKey][title].sales += sales;
+            monthlyProductTotals[mKey][title].qty += qty;
+
+            dateData[dateStr] = (dateData[dateStr] || 0) + sales;
+            categoryData[category] = (categoryData[category] || 0) + sales;
+        }
+
+        if (rawDates.length === 0) return alert('データが見つかりませんでした。');
+
+        rawDates.sort((a, b) => a - b);
+        const startDate = rawDates[0];
+        const endDate = rawDates[rawDates.length - 1];
+        
+        const filledDateLabels = []; 
+        const filledDateValues = [];
+        const weekdaySales = Array(7).fill(0); 
+        const weekdayCounts = Array(7).fill(0);
+        const monthlySummary = {}; 
+
+        let curr = new Date(startDate);
+        while (curr <= endDate) {
+            const dStr = `${curr.getFullYear()}/${curr.getMonth()+1}/${curr.getDate()}`;
+            const mKey = `${curr.getFullYear()}/${String(curr.getMonth()+1).padStart(2, '0')}`;
+            const s = dateData[dStr] || 0;
+            filledDateLabels.push(dStr); 
+            filledDateValues.push(s);
+            weekdaySales[curr.getDay()] += s; 
+            weekdayCounts[curr.getDay()] += 1;
+            monthlySummary[mKey] = (monthlySummary[mKey] || 0) + s;
+            curr.setDate(curr.getDate() + 1);
+        }
+
+        const weekdayAverages = weekdaySales.map((s, i) => weekdayCounts[i] > 0 ? Math.round(s / weekdayCounts[i]) : 0);
+
+        document.getElementById('summaryArea').style.display = 'grid';
+        document.getElementById('dashboardArea').style.display = 'grid';
+        document.getElementById('totalSales').textContent = `¥${totalSales.toLocaleString()}`;
+        document.getElementById('totalQty').textContent = `${totalQty.toLocaleString()}個`;
+        document.getElementById('analysisPeriod').textContent = `${startDate.toLocaleDateString()}～${endDate.toLocaleDateString()}`;
+
+        monthFilter.innerHTML = '<option value="all">総合（全期間）</option>';
+        Object.keys(monthlyProductTotals).sort().forEach(m => {
+            const opt = document.createElement('option'); opt.value = m; opt.textContent = m; monthFilter.appendChild(opt);
+        });
+
+        const sortedGlobal = Object.keys(globalProductTotals).map(k => ({ t: k, s: globalProductTotals[k].sales })).sort((a, b) => b.s - a.s);
+        if(sortedGlobal.length > 0) document.getElementById('topProduct').textContent = sortedGlobal[0].t;
+
+        renderAllCharts(filledDateLabels, filledDateValues, monthlySummary, weekdayAverages, categoryData);
+        updateRankingChart('all');
+    }
+
+    function updateRankingChart(mode) {
+        let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
+        
+        const sorted = Object.keys(targetData).map(k => ({ 
+            title: k, 
+            sales: targetData[k].sales, 
+            qty: targetData[k].qty 
+        })).sort((a, b) => b.sales - a.sales).slice(0, 15);
+
+        const labels = sorted.map(p => `${p.title} (${p.qty}個)`);
+        const dataSales = sorted.map(p => p.sales);
+
+        if (charts.ranking) charts.ranking.destroy();
+
+        charts.ranking = new Chart(document.getElementById('rankingChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets:
