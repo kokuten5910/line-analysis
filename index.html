@@ -137,8 +137,8 @@
         reader.readAsText(file, 'Shift_JIS');
     }
 
-    // 【スマホ対策】安全に日付オブジェクトを作る関数
     function parseSafeDate(dateStr) {
+        if (!dateStr) return new Date(NaN);
         const parts = dateStr.split('/');
         if (parts.length === 3) {
             const y = parseInt(parts[0], 10);
@@ -163,22 +163,30 @@
 
         for (let i = 1; i < lines.length; i++) {
             const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-            if (row.length < 4) continue;
+            
+            // 【超重要：スマホ対策ガード】
+            // 列が足りない、またはデータが空っぽの行は、エラーを出さずに完全にスキップ
+            if (!row || row.length < 4 || !row[0] || !row[2]) {
+                continue; 
+            }
 
             const dateStr = row[0].trim();
-            const title = row[1].replace(/^"|"$/g, '').trim();
+            const title = row[1] ? row[1].replace(/^"|"$/g, '').trim() : '不明なアイテム';
+            
             const salesRaw = row[2].replace(/[¥￥, \u00A0]/g, '').trim();
             const sales = parseInt(salesRaw) || 0;
-            const category = row[3].replace(/^"|"$/g, '').trim();
+            
+            const category = row[3] ? row[3].replace(/^"|"$/g, '').trim() : 'その他';
+
+            // 日付のチェック（ここでもエラーを徹底ガード）
+            const dateObj = parseSafeDate(dateStr);
+            if (!dateObj || isNaN(dateObj.getTime())) {
+                continue; 
+            }
 
             const qty = estimateQty(sales);
             totalSales += sales;
             totalQty += qty;
-
-            // スマホに優しい日付解析関数を使用
-            const dateObj = parseSafeDate(dateStr);
-            if (isNaN(dateObj.getTime())) continue; 
-            
             rawDates.push(dateObj);
 
             if (!globalProductTotals[title]) globalProductTotals[title] = { sales: 0, qty: 0 };
