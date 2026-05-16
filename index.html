@@ -24,7 +24,6 @@
             h1 { font-size: 28px; }
         }
         
-        /* 見切れ対策：高さを自動調整（内容に応じて伸びる） */
         .chart-container { 
             background: #fff; 
             padding: 15px; 
@@ -36,7 +35,6 @@
         }
         .chart-container h3 { margin-top: 0; font-size: 14px; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
         
-        /* グラフ自体のサイズ制限 */
         .chart-container canvas {
             max-height: 280px;
             width: 100% !important;
@@ -139,6 +137,18 @@
         reader.readAsText(file, 'Shift_JIS');
     }
 
+    // 【スマホ対策】安全に日付オブジェクトを作る関数
+    function parseSafeDate(dateStr) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10) - 1;
+            const d = parseInt(parts[2], 10);
+            return new Date(y, m, d);
+        }
+        return new Date(dateStr);
+    }
+
     function parseAndAnalyzeCSV(text) {
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length <= 1) return alert('データ形式が正しくありません。');
@@ -157,24 +167,24 @@
 
             const dateStr = row[0].trim();
             const title = row[1].replace(/^"|"$/g, '').trim();
-            
-            // 【修正箇所】半角・全角の￥、カンマ、スペースをすべて綺麗に削除して数値化
             const salesRaw = row[2].replace(/[¥￥, \u00A0]/g, '').trim();
             const sales = parseInt(salesRaw) || 0;
-            
             const category = row[3].replace(/^"|"$/g, '').trim();
 
             const qty = estimateQty(sales);
             totalSales += sales;
             totalQty += qty;
-            rawDates.push(new Date(dateStr));
+
+            // スマホに優しい日付解析関数を使用
+            const dateObj = parseSafeDate(dateStr);
+            if (isNaN(dateObj.getTime())) continue; 
+            
+            rawDates.push(dateObj);
 
             if (!globalProductTotals[title]) globalProductTotals[title] = { sales: 0, qty: 0 };
             globalProductTotals[title].sales += sales;
             globalProductTotals[title].qty += qty;
 
-            const dateObj = new Date(dateStr);
-            if (isNaN(dateObj.getTime())) continue; // 不正な日付をスキップ
             const monthLabelKey = `${dateObj.getFullYear()}年${String(dateObj.getMonth() + 1).padStart(2, '0')}月`;
 
             if (!monthlyProductTotals[monthLabelKey]) monthlyProductTotals[monthLabelKey] = {};
@@ -268,3 +278,37 @@
     }
 
     function renderAllCharts(dateLabels, dateValues, monthlyData, weekdayAverages, categoryData) {
+        Object.keys(charts).forEach(key => { if(charts[key]) charts[key].destroy(); });
+
+        charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: dateLabels, datasets: [{ label: '日別売上', data: dateValues, borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.05)', borderWidth: 1.5, fill: true, tension: 0.1, pointRadius: 1 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        const monthLabels = Object.keys(monthlyData).sort();
+        const monthValues = monthLabels.map(m => monthlyData[m]);
+        charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: monthLabels, datasets: [{ label: '月別売上', data: monthValues, backgroundColor: '#9b59b6', borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+        charts.weekday = new Chart(document.getElementById('weekdayChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: weekdays, datasets: [{ label: '曜日平均', data: weekdayAverages, backgroundColor: ['#e74c3c', '#bdc3c7', '#bdc3c7', '#bdc3c7', '#bdc3c7', '#bdc3c7', '#3498db'], borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        const catLabels = Object.keys(categoryData);
+        const catValues = catLabels.map(c => categoryData[c]);
+        charts.category = new Chart(document.getElementById('categoryChart').getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: catLabels, datasets: [{ data: catValues, backgroundColor: ['#2ecc71', '#e67e22'] }] },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+</script>
+</body>
+</html>
