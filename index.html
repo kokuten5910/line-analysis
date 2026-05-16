@@ -12,11 +12,13 @@
         .file-input-area { background: #fff; border: 2px dashed #3498db; padding: 20px; text-align: center; border-radius: 8px; cursor: pointer; margin-bottom: 20px; }
         #csvFile { display: none; }
         
+        /* スマホでは1列、PCでは4列に自動切替 */
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
         .card { background: #fff; padding: 15px 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; }
         .card h3 { margin: 0 0 5px 0; color: #7f8c8d; font-size: 12px; }
         .card p { margin: 0; font-size: 20px; font-weight: bold; color: #2c3e50; word-break: break-all; }
         
+        /* スマホでは縦並び、PCでは2列に自動切替 */
         .dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px; }
         @media (min-width: 768px) {
             .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); }
@@ -24,18 +26,29 @@
             h1 { font-size: 28px; }
         }
         
-        /* グラフコンテナの高さと余白をスマホ用に最適化 */
-        .chart-container { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); position: relative; height: 340px; box-sizing: border-box; }
-        .chart-container h3 { margin-top: 0; font-size: 14px; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .chart-container { 
+    background: #fff; 
+    padding: 15px; 
+    border-radius: 8px; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+    position: relative; 
+    /* 高さを固定せず、中身に合わせて自動で伸びるように変更 */
+    min-height: 340px; 
+    height: auto; 
+}
+
+/* グラフ自体を描くキャンバス（canvas）だけは、しっかり高さを保つ設定 */
+.chart-container canvas {
+    max-height: 280px;
+    width: 100% !important;
+}
+        .chart-container h3 { margin-top: 0; font-size: 14px; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
         
         .month-select { padding: 4px 8px; font-size: 12px; border-radius: 4px; border: 1px solid #bdc3c7; background-color: #fff; color: #2c3e50; cursor: pointer; }
         .ranking-table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 13px; }
         .ranking-table th, .ranking-table td { padding: 8px 5px; text-align: left; border-bottom: 1px solid #eee; }
         .ranking-table th { background-color: #f8f9fa; }
         .text-right { text-align: right; }
-        
-        /* グラフ自体の表示領域を確保 */
-        .chart-wrapper { position: relative; width: 100%; height: 260px; }
     </style>
 </head>
 <body>
@@ -58,17 +71,17 @@
     <div class="dashboard-grid" id="dashboardArea" style="display: none;">
         <div class="chart-container full-width">
             <h3>📈 日別売上推移</h3>
-            <div class="chart-wrapper"><canvas id="trendChart"></canvas></div>
+            <canvas id="trendChart"></canvas>
         </div>
 
         <div class="chart-container">
             <h3>🗓️ 月別売上推移</h3>
-            <div class="chart-wrapper"><canvas id="monthChart"></canvas></div>
+            <canvas id="monthChart"></canvas>
         </div>
 
         <div class="chart-container">
             <h3>📅 曜日別 平均売上高</h3>
-            <div class="chart-wrapper"><canvas id="weekdayChart"></canvas></div>
+            <canvas id="weekdayChart"></canvas>
         </div>
 
         <div class="chart-container" style="overflow-y: auto;">
@@ -93,7 +106,7 @@
 
         <div class="chart-container">
             <h3>🎨 カテゴリ別売上比率</h3>
-            <div class="chart-wrapper"><canvas id="categoryChart"></canvas></div>
+            <canvas id="categoryChart"></canvas>
         </div>
     </div>
 </div>
@@ -118,4 +131,169 @@
     ['dragenter', 'dragover'].forEach(e => dropArea.addEventListener(e, (x) => { x.preventDefault(); dropArea.style.background = '#e8f4fd'; }));
     ['dragleave', 'drop'].forEach(e => dropArea.addEventListener(e, (x) => { x.preventDefault(); dropArea.style.background = '#fff'; }));
     dropArea.addEventListener('drop', (e) => { e.preventDefault(); if(e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); });
-    fileInput.addEventListener('change',
+    fileInput.addEventListener('change', (e) => { if(e.target.files.length > 0) processFile(e.target.files[0]); });
+
+    monthFilter.addEventListener('change', () => { updateRankingTable(monthFilter.value); });
+
+    function processFile(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) { parseAndAnalyzeCSV(e.target.result); };
+        reader.readAsText(file, 'Shift_JIS');
+    }
+
+    function parseAndAnalyzeCSV(text) {
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length <= 1) return alert('データ形式が正しくありません。');
+
+        let totalSales = 0;
+        let totalQty = 0;
+        globalProductTotals = {};
+        monthlyProductTotals = {};
+        const dateData = {}; 
+        const categoryData = {};
+        let rawDates = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+            if (row.length < 4) continue;
+
+            const dateStr = row[0].trim();
+            const title = row[1].replace(/^"|"$/g, '').trim();
+            const sales = parseInt(row[2].replace(/[¥,]/g, '').trim()) || 0;
+            const category = row[3].replace(/^"|"$/g, '').trim();
+
+            const qty = estimateQty(sales);
+            totalSales += sales;
+            totalQty += qty;
+            rawDates.push(new Date(dateStr));
+
+            if (!globalProductTotals[title]) globalProductTotals[title] = { sales: 0, qty: 0 };
+            globalProductTotals[title].sales += sales;
+            globalProductTotals[title].qty += qty;
+
+            const dateObj = new Date(dateStr);
+            const monthLabelKey = `${dateObj.getFullYear()}年${String(dateObj.getMonth() + 1).padStart(2, '0')}月`;
+
+            if (!monthlyProductTotals[monthLabelKey]) monthlyProductTotals[monthLabelKey] = {};
+            if (!monthlyProductTotals[monthLabelKey][title]) monthlyProductTotals[monthLabelKey][title] = { sales: 0, qty: 0 };
+            monthlyProductTotals[monthLabelKey][title].sales += sales;
+            monthlyProductTotals[monthLabelKey][title].qty += qty;
+
+            if (!dateData[dateStr]) dateData[dateStr] = 0;
+            dateData[dateStr] += sales;
+
+            if (!categoryData[category]) categoryData[category] = 0;
+            categoryData[category] += sales;
+        }
+
+        rawDates.sort((a, b) => a - b);
+        const startDate = rawDates[0];
+        const endDate = rawDates[rawDates.length - 1];
+        
+        const filledDateLabels = [];
+        const filledDateValues = [];
+        const weekdaySales = Array(7).fill(0);
+        const weekdayCounts = Array(7).fill(0);
+        const monthlyData = {}; 
+
+        let currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+            const y = currentDate.getFullYear();
+            const m = currentDate.getMonth() + 1;
+            const d = currentDate.getDate();
+            const w = currentDate.getDay(); 
+            
+            const formattedDate = `${y}/${m}/${d}`;
+            const monthKey = `${y}/${String(m).padStart(2, '0')}`;
+            const daySales = dateData[formattedDate] || 0;
+
+            filledDateLabels.push(formattedDate);
+            filledDateValues.push(daySales);
+            weekdaySales[w] += daySales;
+            weekdayCounts[w] += 1;
+
+            if (!monthlyData[monthKey]) monthlyData[monthKey] = 0;
+            monthlyData[monthKey] += daySales;
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        const weekdayAverages = weekdaySales.map((sales, idx) => weekdayCounts[idx] > 0 ? Math.round(sales / weekdayCounts[idx]) : 0);
+
+        document.getElementById('summaryArea').style.display = 'grid';
+        document.getElementById('dashboardArea').style.display = 'grid';
+        document.getElementById('totalSales').textContent = `¥${totalSales.toLocaleString()}`;
+        document.getElementById('totalQty').textContent = `${totalQty.toLocaleString()}個`;
+        
+        const startStr = `${startDate.getFullYear()}/${startDate.getMonth()+1}/${startDate.getDate()}`;
+        const endStr = `${endDate.getFullYear()}/${endDate.getMonth()+1}/${endDate.getDate()}`;
+        document.getElementById('analysisPeriod').textContent = `${startStr}～${endStr}`;
+
+        monthFilter.innerHTML = '<option value="all">総合（全期間）</option>';
+        Object.keys(monthlyProductTotals).sort().forEach(mKey => {
+            const opt = document.createElement('option');
+            opt.value = mKey; opt.textContent = mKey; monthFilter.appendChild(opt);
+        });
+
+        const sortedGlobal = Object.keys(globalProductTotals).map(key => ({ title: key, sales: globalProductTotals[key].sales })).sort((a, b) => b.sales - a.sales);
+        if(sortedGlobal.length > 0) document.getElementById('topProduct').textContent = sortedGlobal[0].title;
+
+        updateRankingTable('all');
+        renderAllCharts(filledDateLabels, filledDateValues, monthlyData, weekdayAverages, categoryData);
+    }
+
+    function updateRankingTable(mode) {
+        const tableBody = document.getElementById('rankingTableBody');
+        tableBody.innerHTML = '';
+        let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
+        const sorted = Object.keys(targetData).map(key => ({ title: key, sales: targetData[key].sales, qty: targetData[key].qty })).sort((a, b) => b.sales - a.sales);
+
+        if(sorted.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#999;">なし</td></tr>'; return;
+        }
+
+        sorted.forEach((p, index) => {
+            const row = `<tr>
+                <td>${index + 1}</td>
+                <td style="max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${p.title}">${p.title}</td>
+                <td class="text-right">¥${p.sales.toLocaleString()}</td>
+                <td class="text-right">${p.qty}</td>
+            </tr>`;
+            tableBody.insertAdjacentHTML('beforeend', row);
+        });
+    }
+
+    function renderAllCharts(dateLabels, dateValues, monthlyData, weekdayAverages, categoryData) {
+        Object.keys(charts).forEach(key => { if(charts[key]) charts[key].destroy(); });
+
+        charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: dateLabels, datasets: [{ label: '日別売上', data: dateValues, borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.05)', borderWidth: 1.5, fill: true, tension: 0.1, pointRadius: 1 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        const monthLabels = Object.keys(monthlyData).sort();
+        const monthValues = monthLabels.map(m => monthlyData[m]);
+        charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: monthLabels, datasets: [{ label: '月別売上', data: monthValues, backgroundColor: '#9b59b6', borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+        charts.weekday = new Chart(document.getElementById('weekdayChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: weekdays, datasets: [{ label: '曜日平均', data: weekdayAverages, backgroundColor: ['#e74c3c', '#bdc3c7', '#bdc3c7', '#bdc3c7', '#bdc3c7', '#bdc3c7', '#3498db'], borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+
+        const catLabels = Object.keys(categoryData);
+        const catValues = catLabels.map(c => categoryData[c]);
+        charts.category = new Chart(document.getElementById('categoryChart').getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: catLabels, datasets: [{ data: catValues, backgroundColor: ['#2ecc71', '#e67e22'] }] },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+</script>
+</body>
+</html>
