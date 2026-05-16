@@ -41,11 +41,12 @@
             width: 100% !important;
         }
 
+        /* 文字が全部見えるようにランキングのコンテナ幅と高さを最適化 */
         .chart-container.ranking-container {
-            min-height: 480px;
+            min-height: 520px;
         }
         .chart-container.ranking-container canvas {
-            max-height: 420px;
+            max-height: 460px;
         }
         
         .month-select { padding: 4px 8px; font-size: 12px; border-radius: 4px; border: 1px solid #bdc3c7; background-color: #fff; color: #2c3e50; cursor: pointer; }
@@ -71,7 +72,7 @@
     <div class="dashboard-grid" id="dashboardArea" style="display: none;">
         <div class="chart-container full-width ranking-container">
             <h3>
-                <span>👑 獲得売上ランキング（金額・販売個数）</span>
+                <span>👑 売上ランキング（項目名の横に [売上 / 個数] を常時表示）</span>
                 <select id="rankMonthFilter" class="month-select">
                     <option value="all">総合（全期間）</option>
                 </select>
@@ -239,10 +240,9 @@
             qty: targetData[k].qty 
         })).sort((a, b) => b.sales - a.sales).slice(0, 15);
 
-        // ラベルはシンプルに「タイトルのみ」にしてグラフをスッキリさせます
-        const labels = sorted.map(p => p.title);
+        // 【今回のコア改良】左側のラベル自体に「タイトル [¥金額 / 個数]」を最初から埋め込む
+        const labels = sorted.map(p => `${p.title} [¥${p.sales.toLocaleString()} / ${p.qty}個]`);
         const dataSales = sorted.map(p => p.sales);
-        const dataQtys = sorted.map(p => p.qty);
 
         if (charts.ranking) {
             charts.ranking.destroy();
@@ -266,27 +266,15 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false },
-                    // 【安全・確実な金額＆個数表示】ツールチップを常に最前面に全表示する特殊設定
-                    tooltip: {
-                        enabled: true,
-                        trigger: 'axis',
-                        callbacks: {
-                            label: function(context) {
-                                const index = context.dataIndex;
-                                const amt = dataSales[index].toLocaleString();
-                                const qty = dataQtys[index];
-                                return ` 売上: ¥${amt} / 数量: ${qty}個`;
-                            }
-                        }
-                    }
+                    legend: { display: false }
                 },
                 scales: {
                     x: { beginAtZero: true },
                     y: {
                         ticks: {
                             autoSkip: false,
-                            font: { size: 11 }
+                            font: { size: 11, weight: 'bold' }, // 文字を少し太くして読みやすく
+                            color: '#2c3e50'
                         }
                     }
                 }
