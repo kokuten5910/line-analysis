@@ -24,7 +24,6 @@
 
         .dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px; }
         
-        /* 基準スタイル（スマホ向け：15件×2行がゆったり入るように縦幅を広めに確保） */
         .chart-container { 
             background: #fff; 
             padding: 15px; 
@@ -37,14 +36,15 @@
         .chart-container.ranking-container { min-height: 680px; }
         .chart-container.ranking-container canvas { max-height: 620px; width: 100% !important; }
 
+        /* 画像リスト表示の時は中身に応じて高さを自動で伸ばす */
+        .chart-container.ranking-container.auto-height { min-height: auto !important; height: auto !important; }
+
         @media (min-width: 768px) {
             .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); }
             .chart-container.full-width { grid-column: 1 / -1; }
             h1 { font-size: 28px; }
             .card p { font-size: 20px; }
             .selected-month-total { font-size: 13px; margin-left: 8px; margin-top: 0; }
-            
-            /* PC向け：横幅に余裕が出るため、縦幅は元のスマートな高さに抑える */
             .chart-container.ranking-container { min-height: 520px; }
             .chart-container.ranking-container canvas { max-height: 460px; }
         }
@@ -53,9 +53,26 @@
         .chart-container canvas { max-height: 300px; width: 100% !important; }
         
         .month-select { padding: 4px 8px; font-size: 12px; border-radius: 4px; border: 1px solid #bdc3c7; background-color: #fff; color: #2c3e50; cursor: pointer; }
-        .filter-group { display: flex; gap: 5px; }
+        .filter-group { display: flex; gap: 5px; flex-wrap: wrap; }
         
         .selected-month-total { font-size: 11px; color: #27ae60; font-weight: bold; background: #e8f8f5; padding: 2px 8px; border-radius: 12px; display: inline-block; margin-top: 2px; }
+
+        /* 🖼️ 画像付きランキングリストのスタイル */
+        .ranking-list-container { display: none; flex-direction: column; gap: 8px; margin-top: 10px; width: 100%; text-align: left; }
+        .ranking-item { display: flex; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 6px; position: relative; gap: 12px; border: 1px solid #eef2f5; overflow: hidden; }
+        .rank-badge { font-size: 14px; font-weight: bold; color: #7f8c8d; min-width: 24px; text-align: center; z-index: 1; }
+        .rank-badge.top3 { color: #e74c3c; font-size: 18px; }
+        .rank-thumb { width: 45px; height: 45px; object-fit: contain; border-radius: 6px; background: #fff; border: 1px solid #e2e8f0; flex-shrink: 0; z-index: 1; }
+        .rank-info { flex-grow: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; z-index: 1; }
+        .rank-title { font-size: 13px; font-weight: bold; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .rank-meta { font-size: 11px; color: #7f8c8d; }
+        .rank-bar-bg { position: absolute; top: 0; left: 0; bottom: 0; background: rgba(52, 152, 219, 0.08); width: 0; transition: width 0.4s ease; z-index: 0; pointer-events: none; }
+
+        @media (max-width: 768px) {
+            .rank-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 12px; }
+            .ranking-item { gap: 8px; padding: 8px; }
+            .rank-thumb { width: 40px; height: 40px; }
+        }
 
         .heatmap-box { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
         .heatmap-month-section { border: 1px solid #eee; padding: 10px; border-radius: 6px; display: none; }
@@ -73,8 +90,8 @@
     <h1>📊 LINE売上分析ツール</h1>
     
     <div class="file-input-area" id="dropArea" onclick="document.getElementById('csvFile').click()">
-        <p style="margin: 0; font-size: 14px; font-weight: bold; color: #3498db;">売上CSVを選択またはドロップ</p>
-        <input type="file" id="csvFile" accept=".csv">
+        <p style="margin: 0; font-size: 14px; font-weight: bold; color: #3498db;">売上CSV・ショップCSVを選択またはドロップ（複数可）</p>
+        <input type="file" id="csvFile" accept=".csv" multiple>
     </div>
 
     <div id="captureArea" style="display: none;">
@@ -95,6 +112,10 @@
                 <h3>
                     <span>👑 アイテムランキング <span id="selectedMonthTotal"></span></span>
                     <div class="filter-group">
+                        <select id="rankDisplayMode" class="month-select">
+                            <option value="chart">📊 グラフ表示（文字）</option>
+                            <option value="list">🖼️ 画像付きリスト</option>
+                        </select>
                         <select id="rankSortFilter" class="month-select">
                             <option value="salesDesc">💰 売上金額順</option>
                             <option value="qtyDesc">📦 売上件数（個数）順</option>
@@ -107,6 +128,7 @@
                     </div>
                 </h3>
                 <canvas id="rankingChart"></canvas>
+                <div id="rankingList" class="ranking-list-container"></div>
             </div>
 
             <div class="chart-container">
@@ -151,12 +173,14 @@
     const dropArea = document.getElementById('dropArea');
     const monthFilter = document.getElementById('rankMonthFilter');
     const sortFilter = document.getElementById('rankSortFilter');
+    const displayModeFilter = document.getElementById('rankDisplayMode');
     const heatmapMonthFilter = document.getElementById('heatmapMonthFilter');
     
     let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null };
     let globalProductTotals = {};
     let monthlyProductTotals = {};
     let globalDateData = {};
+    let globalShopData = {};
 
     function estimateQty(salesAmt) {
         if (salesAmt <= 0) return 0;
@@ -168,17 +192,69 @@
 
     ['dragenter', 'dragover'].forEach(e => dropArea.addEventListener(e, (x) => { x.preventDefault(); dropArea.style.background = '#e8f4fd'; }));
     ['dragleave', 'drop'].forEach(e => dropArea.addEventListener(e, (x) => { x.preventDefault(); dropArea.style.background = '#fff'; }));
-    dropArea.addEventListener('drop', (e) => { e.preventDefault(); if(e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); });
-    fileInput.addEventListener('change', (e) => { if(e.target.files.length > 0) processFile(e.target.files[0]); });
+    
+    dropArea.addEventListener('drop', (e) => { 
+        e.preventDefault(); 
+        if(e.dataTransfer.files.length > 0) {
+            for(let i=0; i<e.dataTransfer.files.length; i++) processFile(e.dataTransfer.files[i]);
+        }
+    });
+    fileInput.addEventListener('change', (e) => { 
+        if(e.target.files.length > 0) {
+            for(let i=0; i<e.target.files.length; i++) processFile(e.target.files[i]);
+        }
+    });
 
     monthFilter.addEventListener('change', () => { updateRankingChart(); });
     sortFilter.addEventListener('change', () => { updateRankingChart(); });
+    displayModeFilter.addEventListener('change', () => { updateRankingChart(); });
     heatmapMonthFilter.addEventListener('change', () => { updateHeatmapVisibility(heatmapMonthFilter.value); });
 
     function processFile(file) {
         const reader = new FileReader();
-        reader.onload = function(e) { parseAndAnalyzeCSV(e.target.result); };
+        reader.onload = function(e) { 
+            const text = e.target.result;
+            if (text.includes('日付') && text.includes('売上')) {
+                parseAndAnalyzeCSV(text); 
+            } else if (text.includes('画像URL') || text.includes('ショップURL')) {
+                parseShopCSV(text);
+            } else {
+                alert('認識できないCSVファイルです。売上CSVかショップCSVをアップロードしてください。');
+            }
+        };
         reader.readAsText(file, 'Shift_JIS');
+    }
+
+    function parseShopCSV(text) {
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length <= 1) return;
+        
+        const header = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.replace(/^"|"$/g, '').trim());
+        const titleIdx = header.indexOf('タイトル');
+        const imgIdx = header.indexOf('画像URL');
+        
+        if (titleIdx === -1 || imgIdx === -1) {
+            alert('ショップCSVの形式が正しくありません。');
+            return;
+        }
+        
+        for (let i = 1; i < lines.length; i++) {
+            const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+            if (!row || row.length <= Math.max(titleIdx, imgIdx)) continue;
+            
+            const title = row[titleIdx].replace(/^"|"$/g, '').trim();
+            const imgUrl = row[imgIdx].replace(/^"|"$/g, '').trim();
+            if (title && imgUrl) {
+                globalShopData[title] = imgUrl;
+            }
+        }
+        
+        displayModeFilter.value = 'list';
+        if (Object.keys(globalProductTotals).length > 0) {
+            updateRankingChart();
+        } else {
+            alert('🛍️ ショップ情報を読み込みました！続けて売上CSVを読み込ませてください。');
+        }
     }
 
     function parseSafeDate(dateStr) {
@@ -301,6 +377,7 @@
     function updateRankingChart() {
         const mode = monthFilter.value;
         const sortType = sortFilter.value;
+        const displayMode = displayModeFilter.value;
         
         let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
         
@@ -343,76 +420,114 @@
         }
 
         const isMobile = window.innerWidth < 768;
-        // 【変更】スマホでも削らずに上位15件すべてを表示
         const displayCount = 15; 
         const sorted = items.slice(0, displayCount);
 
-        const labels = sorted.map(p => {
-            const priceLabel = `[¥${p.sales.toLocaleString()} / ${p.qty}個]`;
-            if (isMobile) {
-                const truncatedTitle = p.title.length > 14 ? p.title.slice(0, 14) + '...' : p.title;
-                return [truncatedTitle, priceLabel]; 
-            } else {
-                return [p.title, priceLabel];
-            }
-        });
+        const container = document.querySelector('.chart-container.ranking-container');
+        const canvas = document.getElementById('rankingChart');
+        const listContainer = document.getElementById('rankingList');
 
-        let dataJapan, dataOverseas, labelJapan, labelOverseas;
-        
-        if (sortType === 'qtyDesc') {
-            dataJapan = sorted.map(p => p.japanQty);
-            dataOverseas = sorted.map(p => p.overseasQty);
-            labelJapan = '日本での個数';
-            labelOverseas = '海外での個数';
-        } else {
-            dataJapan = sorted.map(p => p.japanSales);
-            dataOverseas = sorted.map(p => p.overseasSales);
-            labelJapan = '日本での売上';
-            labelOverseas = '海外での売上';
+        // ✨【修正ポイント】切り替え時のバグを防ぐため、真っ先に以前のグラフオブジェクトを完全破棄
+        if (charts.ranking) { 
+            charts.ranking.destroy(); 
+            charts.ranking = null; 
+            // 残ったゴミ属性・スタイルを綺麗にお掃除
+            canvas.removeAttribute('width');
+            canvas.removeAttribute('height');
+            canvas.style.width = '';
+            canvas.style.height = '';
         }
 
-        if (charts.ranking) { charts.ranking.destroy(); charts.ranking = null; }
+        if (displayMode === 'chart') {
+            // 📊 従来のグラフ表示
+            container.classList.remove('auto-height');
+            canvas.style.display = 'block';
+            listContainer.style.display = 'none';
 
-        const ctx = document.getElementById('rankingChart').getContext('2d');
-        charts.ranking = new Chart(ctx, {
-            type: 'bar',
-            data: { 
-                labels: labels, 
-                datasets: [
-                    { label: labelJapan, data: dataJapan, backgroundColor: '#34495e', borderRadius: { topLeft: 0, bottomLeft: 0, topRight: 0, bottomRight: 0 } },
-                    { label: labelOverseas, data: dataOverseas, backgroundColor: '#e67e22', borderRadius: { topLeft: 4, bottomLeft: 4, topRight: 4, bottomRight: 4 } }
-                ] 
-            },
-            options: { 
-                indexAxis: 'y', 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                plugins: { 
-                    legend: { display: true, position: 'bottom' },
-                    tooltip: {
-                        callbacks: {
-                            title: function(context) {
-                                return sorted[context[0].dataIndex].title;
-                            }
-                        }
-                    }
-                }, 
-                scales: { 
-                    x: { stacked: true, beginAtZero: true }, 
-                    y: { 
-                        stacked: true, 
-                        ticks: { 
-                            autoSkip: false, 
-                            font: { 
-                                size: isMobile ? 9 : 11, 
-                                weight: 'bold' 
-                            }, 
-                            color: '#2c3e50' 
-                        } 
-                    } 
-                } 
+            const labels = sorted.map(p => {
+                const priceLabel = `[¥${p.sales.toLocaleString()} / ${p.qty}個]`;
+                if (isMobile) {
+                    const truncatedTitle = p.title.length > 14 ? p.title.slice(0, 14) + '...' : p.title;
+                    return [truncatedTitle, priceLabel]; 
+                } else {
+                    return [p.title, priceLabel];
+                }
+            });
+
+            let dataJapan, dataOverseas, labelJapan, labelOverseas;
+            if (sortType === 'qtyDesc') {
+                dataJapan = sorted.map(p => p.japanQty);
+                dataOverseas = sorted.map(p => p.overseasQty);
+                labelJapan = '日本での個数';
+                labelOverseas = '海外での個数';
+            } else {
+                dataJapan = sorted.map(p => p.japanSales);
+                dataOverseas = sorted.map(p => p.overseasSales);
+                labelJapan = '日本での売上';
+                labelOverseas = '海外での売上';
             }
-        });
+
+            const ctx = canvas.getContext('2d');
+            charts.ranking = new Chart(ctx, {
+                type: 'bar',
+                data: { 
+                    labels: labels, 
+                    datasets: [
+                        { label: labelJapan, data: dataJapan, backgroundColor: '#34495e' },
+                        { label: labelOverseas, data: dataOverseas, backgroundColor: '#e67e22' }
+                    ] 
+                },
+                options: { 
+                    indexAxis: 'y', 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { display: true, position: 'bottom' },
+                        tooltip: { callbacks: { title: (context) => sorted[context[0].dataIndex].title } }
+                    }, 
+                    scales: { 
+                        x: { stacked: true, beginAtZero: true }, 
+                        y: { stacked: true, ticks: { autoSkip: false, font: { size: isMobile ? 9 : 11, weight: 'bold' }, color: '#2c3e50' } }
+                    } 
+                }
+            });
+        } else {
+            // 🖼️ 画像付きリスト表示
+            container.classList.add('auto-height');
+            canvas.style.display = 'none';
+            listContainer.style.display = 'flex';
+            listContainer.innerHTML = '';
+
+            const maxVal = Math.max(...sorted.map(p => sortType === 'qtyDesc' ? p.qty : p.sales), 1);
+
+            sorted.forEach((p, index) => {
+                const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="45" height="45"><rect width="45" height="45" fill="%23f0f0f0"/><text x="50%" y="55%" font-size="20" text-anchor="middle" dominant-baseline="middle">🎨</text></svg>`;
+                const imgUrl = globalShopData[p.title] || fallbackSvg;
+                
+                const currentVal = sortType === 'qtyDesc' ? p.qty : p.sales;
+                const percentage = (currentVal / maxVal) * 100;
+                
+                const itemEl = document.createElement('div');
+                itemEl.className = 'ranking-item';
+                
+                const isTop3 = index < 3 ? 'top3' : '';
+                let metaText = `売上額: ¥${p.sales.toLocaleString()} (${p.qty}個)`;
+                if (p.overseasSales > 0) {
+                    metaText += ` ［日本: ¥${p.japanSales.toLocaleString()} / 海外: ¥${p.overseasSales.toLocaleString()}］`;
+                }
+
+                itemEl.innerHTML = `
+                    <div class="rank-badge ${isTop3}">${index + 1}</div>
+                    <img class="rank-thumb" src="${imgUrl}" alt="${p.title}" onerror="this.src='${fallbackSvg}'">
+                    <div class="rank-info">
+                        <div class="rank-title" title="${p.title}">${p.title}</div>
+                        <div class="rank-meta">${metaText}</div>
+                    </div>
+                    <div class="rank-bar-bg" style="width: ${percentage}%"></div>
+                `;
+                listContainer.appendChild(itemEl);
+            });
+        }
     }
 
     function generateHeatmap(startDate, endDate) {
