@@ -23,13 +23,8 @@
         .save-btn:hover { background-color: #27ae60; }
 
         .dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px; }
-        @media (min-width: 768px) {
-            .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); }
-            .chart-container.full-width { grid-column: 1 / -1; }
-            h1 { font-size: 28px; }
-            .card p { font-size: 20px; }
-        }
         
+        /* 基準スタイル（スマホ向け：15件×2行がゆったり入るように縦幅を広めに確保） */
         .chart-container { 
             background: #fff; 
             padding: 15px; 
@@ -39,14 +34,28 @@
             min-height: 350px; 
             height: auto; 
         }
-        .chart-container h3 { margin-top: 0; font-size: 14px; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-        
-        .chart-container canvas { max-height: 300px; width: 100% !important; }
+        .chart-container.ranking-container { min-height: 680px; }
+        .chart-container.ranking-container canvas { max-height: 620px; width: 100% !important; }
 
-        .chart-container.ranking-container { min-height: 520px; }
-        .chart-container.ranking-container canvas { max-height: 460px; }
+        @media (min-width: 768px) {
+            .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); }
+            .chart-container.full-width { grid-column: 1 / -1; }
+            h1 { font-size: 28px; }
+            .card p { font-size: 20px; }
+            .selected-month-total { font-size: 13px; margin-left: 8px; margin-top: 0; }
+            
+            /* PC向け：横幅に余裕が出るため、縦幅は元のスマートな高さに抑える */
+            .chart-container.ranking-container { min-height: 520px; }
+            .chart-container.ranking-container canvas { max-height: 460px; }
+        }
+        
+        .chart-container h3 { margin-top: 0; font-size: 14px; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px; }
+        .chart-container canvas { max-height: 300px; width: 100% !important; }
         
         .month-select { padding: 4px 8px; font-size: 12px; border-radius: 4px; border: 1px solid #bdc3c7; background-color: #fff; color: #2c3e50; cursor: pointer; }
+        .filter-group { display: flex; gap: 5px; }
+        
+        .selected-month-total { font-size: 11px; color: #27ae60; font-weight: bold; background: #e8f8f5; padding: 2px 8px; border-radius: 12px; display: inline-block; margin-top: 2px; }
 
         .heatmap-box { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
         .heatmap-month-section { border: 1px solid #eee; padding: 10px; border-radius: 6px; display: none; }
@@ -84,10 +93,18 @@
         <div class="dashboard-grid" id="dashboardArea">
             <div class="chart-container full-width ranking-container">
                 <h3>
-                    <span>👑 売上ランキング（項目名の横に [総売上 / 総個数] を常時表示）</span>
-                    <select id="rankMonthFilter" class="month-select">
-                        <option value="all">総合（全期間）</option>
-                    </select>
+                    <span>👑 アイテムランキング <span id="selectedMonthTotal"></span></span>
+                    <div class="filter-group">
+                        <select id="rankSortFilter" class="month-select">
+                            <option value="salesDesc">💰 売上金額順</option>
+                            <option value="qtyDesc">📦 売上件数（個数）順</option>
+                            <option value="dateDesc">✨ 最新の売れた順</option>
+                            <option value="dateAsc">⏳ 最古の売れた順</option>
+                        </select>
+                        <select id="rankMonthFilter" class="month-select">
+                            <option value="all">総合（全期間）</option>
+                        </select>
+                    </div>
                 </h3>
                 <canvas id="rankingChart"></canvas>
             </div>
@@ -133,6 +150,7 @@
     const fileInput = document.getElementById('csvFile');
     const dropArea = document.getElementById('dropArea');
     const monthFilter = document.getElementById('rankMonthFilter');
+    const sortFilter = document.getElementById('rankSortFilter');
     const heatmapMonthFilter = document.getElementById('heatmapMonthFilter');
     
     let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null };
@@ -153,7 +171,8 @@
     dropArea.addEventListener('drop', (e) => { e.preventDefault(); if(e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); });
     fileInput.addEventListener('change', (e) => { if(e.target.files.length > 0) processFile(e.target.files[0]); });
 
-    monthFilter.addEventListener('change', () => { updateRankingChart(monthFilter.value); });
+    monthFilter.addEventListener('change', () => { updateRankingChart(); });
+    sortFilter.addEventListener('change', () => { updateRankingChart(); });
     heatmapMonthFilter.addEventListener('change', () => { updateHeatmapVisibility(heatmapMonthFilter.value); });
 
     function processFile(file) {
@@ -198,20 +217,39 @@
             totalSales += sales; totalQty += qty;
             rawDates.push(dateObj);
 
-            // 国別の集計構造にアップグレード
-            if (!globalProductTotals[title]) globalProductTotals[title] = { sales: 0, qty: 0, japanSales: 0, overseasSales: 0 };
+            if (!globalProductTotals[title]) {
+                globalProductTotals[title] = { sales: 0, qty: 0, japanSales: 0, overseasSales: 0, japanQty: 0, overseasQty: 0, firstDate: dateObj, lastDate: dateObj };
+            }
+            if (dateObj < globalProductTotals[title].firstDate) globalProductTotals[title].firstDate = dateObj;
+            if (dateObj > globalProductTotals[title].lastDate) globalProductTotals[title].lastDate = dateObj;
+            
             globalProductTotals[title].sales += sales;
             globalProductTotals[title].qty += qty;
-            if (country === '日本') { globalProductTotals[title].japanSales += sales; } 
-            else { globalProductTotals[title].overseasSales += sales; }
+            if (country === '日本') { 
+                globalProductTotals[title].japanSales += sales; 
+                globalProductTotals[title].japanQty += qty;
+            } else { 
+                globalProductTotals[title].overseasSales += sales; 
+                globalProductTotals[title].overseasQty += qty;
+            }
 
             const mKey = `${dateObj.getFullYear()}年${String(dateObj.getMonth() + 1).padStart(2, '0')}月`;
             if (!monthlyProductTotals[mKey]) monthlyProductTotals[mKey] = {};
-            if (!monthlyProductTotals[mKey][title]) monthlyProductTotals[mKey][title] = { sales: 0, qty: 0, japanSales: 0, overseasSales: 0 };
+            if (!monthlyProductTotals[mKey][title]) {
+                monthlyProductTotals[mKey][title] = { sales: 0, qty: 0, japanSales: 0, overseasSales: 0, japanQty: 0, overseasQty: 0, firstDate: dateObj, lastDate: dateObj };
+            }
+            if (dateObj < monthlyProductTotals[mKey][title].firstDate) monthlyProductTotals[mKey][title].firstDate = dateObj;
+            if (dateObj > monthlyProductTotals[mKey][title].lastDate) monthlyProductTotals[mKey][title].lastDate = dateObj;
+
             monthlyProductTotals[mKey][title].sales += sales;
             monthlyProductTotals[mKey][title].qty += qty;
-            if (country === '日本') { monthlyProductTotals[mKey][title].japanSales += sales; } 
-            else { monthlyProductTotals[mKey][title].overseasSales += sales; }
+            if (country === '日本') { 
+                monthlyProductTotals[mKey][title].japanSales += sales; 
+                monthlyProductTotals[mKey][title].japanQty += qty;
+            } else { 
+                monthlyProductTotals[mKey][title].overseasSales += sales; 
+                monthlyProductTotals[mKey][title].overseasQty += qty;
+            }
 
             const standardizedDateStr = `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()}`;
             globalDateData[standardizedDateStr] = (globalDateData[standardizedDateStr] || 0) + sales;
@@ -256,26 +294,82 @@
         if(sortedGlobal.length > 0) document.getElementById('topProduct').textContent = sortedGlobal[0].t;
 
         renderAllCharts(filledDateLabels, filledDateValues, monthlySummary, weekdayAverages, categoryData, countryData);
-        updateRankingChart('all');
+        updateRankingChart();
         generateHeatmap(startDate, endDate);
     }
 
-    // 👑 国別色分け積み上げランキングの描画関数
-    function updateRankingChart(mode) {
+    function updateRankingChart() {
+        const mode = monthFilter.value;
+        const sortType = sortFilter.value;
+        
         let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
         
-        // 総売上（sales）が大きい順にソートして上位15個を抽出
-        const sorted = Object.keys(targetData).map(k => ({ 
+        let totalMonthSales = 0;
+        let totalMonthQty = 0;
+        Object.keys(targetData).forEach(k => {
+            totalMonthSales += targetData[k].sales;
+            totalMonthQty += targetData[k].qty;
+        });
+
+        const monthTotalLabel = document.getElementById('selectedMonthTotal');
+        if (mode === 'all') {
+            monthTotalLabel.textContent = '';
+            monthTotalLabel.className = '';
+        } else {
+            monthTotalLabel.textContent = `📈 ${mode}の売上: ¥${totalMonthSales.toLocaleString()} (${totalMonthQty.toLocaleString()}個)`;
+            monthTotalLabel.className = 'selected-month-total';
+        }
+
+        let items = Object.keys(targetData).map(k => ({ 
             title: k, 
             sales: targetData[k].sales, 
             qty: targetData[k].qty,
             japanSales: targetData[k].japanSales || 0,
-            overseasSales: targetData[k].overseasSales || 0
-        })).sort((a, b) => b.sales - a.sales).slice(0, 15);
+            overseasSales: targetData[k].overseasSales || 0,
+            japanQty: targetData[k].japanQty || 0,
+            overseasQty: targetData[k].overseasQty || 0,
+            firstDate: targetData[k].firstDate,
+            lastDate: targetData[k].lastDate
+        }));
 
-        const labels = sorted.map(p => `${p.title} [¥${p.sales.toLocaleString()} / ${p.qty}個]`);
-        const dataJapan = sorted.map(p => p.japanSales);
-        const dataOverseas = sorted.map(p => p.overseasSales);
+        if (sortType === 'salesDesc') {
+            items.sort((a, b) => b.sales - a.sales);
+        } else if (sortType === 'qtyDesc') {
+            items.sort((a, b) => b.qty - a.qty);
+        } else if (sortType === 'dateDesc') {
+            items.sort((a, b) => b.lastDate - a.lastDate);
+        } else if (sortType === 'dateAsc') {
+            items.sort((a, b) => a.firstDate - b.firstDate);
+        }
+
+        const isMobile = window.innerWidth < 768;
+        // 【変更】スマホでも削らずに上位15件すべてを表示
+        const displayCount = 15; 
+        const sorted = items.slice(0, displayCount);
+
+        const labels = sorted.map(p => {
+            const priceLabel = `[¥${p.sales.toLocaleString()} / ${p.qty}個]`;
+            if (isMobile) {
+                const truncatedTitle = p.title.length > 14 ? p.title.slice(0, 14) + '...' : p.title;
+                return [truncatedTitle, priceLabel]; 
+            } else {
+                return [p.title, priceLabel];
+            }
+        });
+
+        let dataJapan, dataOverseas, labelJapan, labelOverseas;
+        
+        if (sortType === 'qtyDesc') {
+            dataJapan = sorted.map(p => p.japanQty);
+            dataOverseas = sorted.map(p => p.overseasQty);
+            labelJapan = '日本での個数';
+            labelOverseas = '海外での個数';
+        } else {
+            dataJapan = sorted.map(p => p.japanSales);
+            dataOverseas = sorted.map(p => p.overseasSales);
+            labelJapan = '日本での売上';
+            labelOverseas = '海外での売上';
+        }
 
         if (charts.ranking) { charts.ranking.destroy(); charts.ranking = null; }
 
@@ -285,18 +379,8 @@
             data: { 
                 labels: labels, 
                 datasets: [
-                    { 
-                        label: '日本での売上', 
-                        data: dataJapan, 
-                        backgroundColor: '#34495e', // シックな紺色
-                        borderRadius: { topLeft: 0, bottomLeft: 0, topRight: 0, bottomRight: 0 }
-                    },
-                    { 
-                        label: '海外での売上', 
-                        data: dataOverseas, 
-                        backgroundColor: '#e67e22', // 鮮やかなオレンジ
-                        borderRadius: { topLeft: 4, bottomLeft: 4, topRight: 4, bottomRight: 4 }
-                    }
+                    { label: labelJapan, data: dataJapan, backgroundColor: '#34495e', borderRadius: { topLeft: 0, bottomLeft: 0, topRight: 0, bottomRight: 0 } },
+                    { label: labelOverseas, data: dataOverseas, backgroundColor: '#e67e22', borderRadius: { topLeft: 4, bottomLeft: 4, topRight: 4, bottomRight: 4 } }
                 ] 
             },
             options: { 
@@ -304,16 +388,27 @@
                 responsive: true, 
                 maintainAspectRatio: false, 
                 plugins: { 
-                    legend: { display: true, position: 'bottom' } // 色分けの凡例を表示
+                    legend: { display: true, position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            title: function(context) {
+                                return sorted[context[0].dataIndex].title;
+                            }
+                        }
+                    }
                 }, 
                 scales: { 
-                    x: { 
-                        stacked: true, // X軸を積み上げ
-                        beginAtZero: true 
-                    }, 
+                    x: { stacked: true, beginAtZero: true }, 
                     y: { 
-                        stacked: true, // Y軸も積み上げ
-                        ticks: { autoSkip: false, font: { size: 11, weight: 'bold' }, color: '#2c3e50' } 
+                        stacked: true, 
+                        ticks: { 
+                            autoSkip: false, 
+                            font: { 
+                                size: isMobile ? 9 : 11, 
+                                weight: 'bold' 
+                            }, 
+                            color: '#2c3e50' 
+                        } 
                     } 
                 } 
             }
@@ -409,14 +504,12 @@
     function renderAllCharts(dateLabels, dateValues, monthlyData, weekdayAverages, categoryData, countryData) {
         Object.keys(charts).forEach(key => { if (charts[key] && key !== 'ranking') { charts[key].destroy(); charts[key] = null; } });
 
-        // 日別売上
         charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
             type: 'line',
             data: { labels: dateLabels, datasets: [{ label: '日別売上', data: dateValues, borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.05)', borderWidth: 1.5, fill: true, tension: 0.1, pointRadius: 1 }] },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
 
-        // 月別売上
         const mLabels = Object.keys(monthlyData).sort();
         charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
             type: 'bar',
@@ -424,14 +517,12 @@
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
 
-        // 曜日別
         charts.weekday = new Chart(document.getElementById('weekdayChart').getContext('2d'), {
             type: 'bar',
             data: { labels: ['日','月','火','水','木','金','土'], datasets: [{ label: '平均売上', data: weekdayAverages, backgroundColor: ['#e74c3c','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#3498db'], borderRadius: 4 }] },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
 
-        // カテゴリ別
         const cLabels = Object.keys(categoryData);
         charts.category = new Chart(document.getElementById('categoryChart').getContext('2d'), {
             type: 'doughnut',
@@ -439,7 +530,6 @@
             options: { responsive: true, maintainAspectRatio: false }
         });
 
-        // 国別売上比率
         const coLabels = Object.keys(countryData);
         const countryColors = ['#34495e', '#e67e22', '#e74c3c', '#9b59b6', '#f1c40f'];
         charts.country = new Chart(document.getElementById('countryChart').getContext('2d'), {
