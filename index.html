@@ -62,7 +62,16 @@
         .ranking-item { display: flex; align-items: center; background: #f8f9fa; padding: 10px; border-radius: 6px; position: relative; gap: 12px; border: 1px solid #eef2f5; overflow: hidden; }
         .rank-badge { font-size: 14px; font-weight: bold; color: #7f8c8d; min-width: 24px; text-align: center; z-index: 1; }
         .rank-badge.top3 { color: #e74c3c; font-size: 18px; }
-        .rank-thumb { width: 45px; height: 45px; object-fit: contain; border-radius: 6px; background: #fff; border: 1px solid #e2e8f0; flex-shrink: 0; z-index: 1; }
+        
+        /* 画像ラッパーと共通サイズ設定 */
+        .rank-thumb-wrapper { width: 45px; height: 45px; border-radius: 6px; background: #fff; border: 1px solid #e2e8f0; flex-shrink: 0; z-index: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .rank-thumb { width: 100%; height: 100%; object-fit: contain; }
+        .rank-thumb-fallback { font-size: 20px; display: none; }
+        
+        /* 画像がない（またはエラー）の時のスタイル */
+        .no-image .rank-thumb { display: none; }
+        .no-image .rank-thumb-fallback { display: block; }
+
         .rank-info { flex-grow: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; z-index: 1; }
         .rank-title { font-size: 13px; font-weight: bold; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .rank-meta { font-size: 11px; color: #7f8c8d; }
@@ -71,7 +80,8 @@
         @media (max-width: 768px) {
             .rank-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 12px; }
             .ranking-item { gap: 8px; padding: 8px; }
-            .rank-thumb { width: 40px; height: 40px; }
+            .rank-thumb-wrapper { width: 40px; height: 40px; }
+            .rank-thumb-fallback { font-size: 18px; }
         }
 
         .heatmap-box { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
@@ -427,11 +437,9 @@
         const canvas = document.getElementById('rankingChart');
         const listContainer = document.getElementById('rankingList');
 
-        // ✨【修正ポイント】切り替え時のバグを防ぐため、真っ先に以前のグラフオブジェクトを完全破棄
         if (charts.ranking) { 
             charts.ranking.destroy(); 
             charts.ranking = null; 
-            // 残ったゴミ属性・スタイルを綺麗にお掃除
             canvas.removeAttribute('width');
             canvas.removeAttribute('height');
             canvas.style.width = '';
@@ -439,7 +447,6 @@
         }
 
         if (displayMode === 'chart') {
-            // 📊 従来のグラフ表示
             container.classList.remove('auto-height');
             canvas.style.display = 'block';
             listContainer.style.display = 'none';
@@ -492,7 +499,6 @@
                 }
             });
         } else {
-            // 🖼️ 画像付きリスト表示
             container.classList.add('auto-height');
             canvas.style.display = 'none';
             listContainer.style.display = 'flex';
@@ -501,14 +507,14 @@
             const maxVal = Math.max(...sorted.map(p => sortType === 'qtyDesc' ? p.qty : p.sales), 1);
 
             sorted.forEach((p, index) => {
-                const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="45" height="45"><rect width="45" height="45" fill="%23f0f0f0"/><text x="50%" y="55%" font-size="20" text-anchor="middle" dominant-baseline="middle">🎨</text></svg>`;
-                const imgUrl = globalShopData[p.title] || fallbackSvg;
+                const imgUrl = globalShopData[p.title];
                 
                 const currentVal = sortType === 'qtyDesc' ? p.qty : p.sales;
                 const percentage = (currentVal / maxVal) * 100;
                 
                 const itemEl = document.createElement('div');
-                itemEl.className = 'ranking-item';
+                // 画像URLが存在しない場合はクラス 'no-image' を付与してCSS側で🎨を出す
+                itemEl.className = `ranking-item ${!imgUrl ? 'no-image' : ''}`;
                 
                 const isTop3 = index < 3 ? 'top3' : '';
                 let metaText = `売上額: ¥${p.sales.toLocaleString()} (${p.qty}個)`;
@@ -518,7 +524,10 @@
 
                 itemEl.innerHTML = `
                     <div class="rank-badge ${isTop3}">${index + 1}</div>
-                    <img class="rank-thumb" src="${imgUrl}" alt="${p.title}" onerror="this.src='${fallbackSvg}'">
+                    <div class="rank-thumb-wrapper">
+                        <img class="rank-thumb" src="${imgUrl || ''}" alt="${p.title}" onerror="this.parentElement.parentElement.classList.add('no-image')">
+                        <span class="rank-thumb-fallback">🎨</span>
+                    </div>
                     <div class="rank-info">
                         <div class="rank-title" title="${p.title}">${p.title}</div>
                         <div class="rank-meta">${metaText}</div>
