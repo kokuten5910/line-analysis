@@ -20,9 +20,8 @@
         .card h3 { margin: 0 0 5px 0; color: #7f8c8d; font-size: 12px; }
         .card p { margin: 0; font-size: 18px; font-weight: bold; color: #2c3e50; word-break: break-all; }
         
-        .summary-advice-block { background: transparent; padding: 0; border-radius: 8px; position: relative; margin-bottom: 20px; }
-        
-        .advice-container { background: #fff; border: 1px solid #e1f7e7; border-left: 6px solid #06C755; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: left; display: none; }
+        /* 💡 最下部に移動したアドバイスカード用スタイル */
+        .advice-container { background: #fff; border: 1px solid #e1f7e7; border-left: 6px solid #06C755; padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: left; display: none; margin-top: 10px; }
         .advice-title { font-size: 15px; font-weight: bold; color: #06C755; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
         .advice-list { margin: 0; padding-left: 20px; font-size: 13px; color: #2c3e50; line-height: 1.6; }
         .advice-list li { margin-bottom: 8px; }
@@ -85,7 +84,6 @@
         .rank-title { font-size: 13px; font-weight: bold; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .rank-meta { font-size: 11px; color: #555; font-weight: 500; }
         
-        /* ⭐️ お気に入りバッジ用スタイル */
         .rank-favorite-badge { font-size: 11px; font-weight: bold; color: #e67e22; background: #fef5e7; padding: 3px 8px; border-radius: 12px; border: 1px solid #fdebd0; z-index: 1; flex-shrink: 0; display: flex; align-items: center; gap: 3px; }
 
         .rank-bar-container { position: absolute; top: 0; left: 0; bottom: 0; right: 0; display: flex; width: 100%; z-index: 0; pointer-events: none; }
@@ -118,22 +116,11 @@
             <button class="save-btn" onclick="saveDashboardAsImage()">📸 全画面をまとめて1枚で保存</button>
         </div>
 
-        <div class="summary-advice-block" id="block-summary" style="background-color: #f4f6f9; padding: 10px; border-radius: 8px;">
-            <div style="text-align: right; margin-bottom: 8px;" class="hide-on-capture">
-                <button class="card-save-btn" onclick="saveSingleElement('block-summary', '売上サマリー_アドバイス')">📸 このカードだけ保存</button>
-            </div>
-            
-            <div class="summary-grid" id="summaryArea">
-                <div class="card"><h3>💸 総売上額</h3><p id="totalSales">¥0</p></div>
-                <div class="card"><h3>📦 推定個数</h3><p id="totalQty">0個</p></div>
-                <div class="card"><h3>🗓️ 期間</h3><p id="analysisPeriod" style="font-size: 12px; margin-top: 5px;">-</p></div>
-                <div class="card"><h3>🏆 稼ぎ頭</h3><p id="topProduct" style="font-size: 12px; margin-top: 5px;">-</p></div>
-            </div>
-
-            <div class="advice-container" id="adviceArea" style="margin-bottom: 0;">
-                <div class="advice-title">💡 クリエイター販売戦略アドバイス（データ分析結果）</div>
-                <ul class="advice-list" id="adviceList"></ul>
-            </div>
+        <div class="summary-grid" id="summaryArea">
+            <div class="card"><h3>💸 総売上額</h3><p id="totalSales">¥0</p></div>
+            <div class="card"><h3>📦 推定個数</h3><p id="totalQty">0個</p></div>
+            <div class="card"><h3>🗓️ 期間</h3><p id="analysisPeriod" style="font-size: 12px; margin-top: 5px;">-</p></div>
+            <div class="card"><h3>🏆 稼ぎ頭</h3><p id="topProduct" style="font-size: 12px; margin-top: 5px;">-</p></div>
         </div>
 
         <div class="dashboard-grid" id="dashboardArea">
@@ -212,6 +199,17 @@
                 <canvas id="weekdayChart"></canvas>
             </div>
         </div>
+
+        <div class="summary-advice-block" id="block-advice" style="background-color: #f4f6f9; padding: 10px; border-radius: 8px; margin-top: 20px;">
+            <div style="text-align: right; margin-bottom: 8px;" class="hide-on-capture">
+                <button class="card-save-btn" onclick="saveSingleElement('block-advice', 'クリエイター販売戦略アドバイス')">📸 このアドバイスだけ保存</button>
+            </div>
+            <div class="advice-container" id="adviceArea" style="margin-top: 0;">
+                <div class="advice-title">💡 クリエイター販売戦略アドバイス（データ分析結果）</div>
+                <ul class="advice-list" id="adviceList"></ul>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -228,8 +226,6 @@
     let monthlyProductTotals = {};
     let globalDateData = {};
     let globalShopData = {};
-    
-    // 💡 お気に入り最新データを保持するオブジェクト { タイトル: { count: お気に入り数, date: 最新取得日 } }
     let globalFavoriteData = {};
 
     function estimateQty(salesAmt) {
@@ -265,7 +261,6 @@
         reader.onload = function(e) { 
             const text = e.target.result;
             if (text.includes('favorite_count') || text.includes('お気に入り')) {
-                // 💡 お気に入り履歴CSVの判定
                 parseFavoriteCSV(text);
             } else if (text.includes('日付') && text.includes('売上')) {
                 parseAndAnalyzeCSV(text); 
@@ -278,7 +273,6 @@
         reader.readAsText(file, 'Shift_JIS');
     }
 
-    // 💡 新規追加：お気に入り履歴CSVをパースする関数（毎日上書き保存されても、最新日付の数値をキープする）
     function parseFavoriteCSV(text) {
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length <= 1) return;
@@ -289,7 +283,7 @@
         const favIdx = header.indexOf('favorite_count');
 
         if (titleIdx === -1 || favIdx === -1) {
-            alert('お気に入りCSVのヘッダー（タイトル, favorite_count）が見つかりません。');
+            alert('お気に入りCSVのヘッダーが見つかりません。');
             return;
         }
 
@@ -302,20 +296,13 @@
             const dateStr = dateIdx !== -1 ? row[dateIdx].replace(/^"|"$/g, '').trim() : '1970/01/01';
             const dateObj = parseSafeDate(dateStr);
 
-            // 履歴のなかで、その作品の「最新日付」のデータのみを採用して保持
             if (!globalFavoriteData[title] || dateObj >= globalFavoriteData[title].date) {
-                globalFavoriteData[title] = {
-                    count: favCount,
-                    date: dateObj
-                };
+                globalFavoriteData[title] = { count: favCount, date: dateObj };
             }
         }
 
-        if (Object.keys(globalProductTotals).length > 0) {
-            updateRankingChart();
-        } else {
-            alert('⭐️ お気に入り情報を読み込みました！売上CSVをドロップすると連動します。');
-        }
+        if (Object.keys(globalProductTotals).length > 0) { updateRankingChart(); } 
+        else { alert('⭐️ お気に入り情報を読み込みました！売上CSVをドロップすると連動します。'); }
     }
 
     function parseShopCSV(text) {
@@ -486,7 +473,6 @@
             productAdvice = `現在の不動の稼ぎ頭は「<span class="advice-highlight">${topProduct}</span>」です！この作品はすでにユーザーに受け入れられている強力なアセット（資産）です。このキャラクターの別バージョン（日常会話特化、敬語版、シュール系、あるいはスタンプ版←→絵文字版への相互展開）を作ることで、既存ファンがセットで購入してくれるリピート効果が期待できます。`;
         }
 
-        // 💡 お気に入りデータに基づいた特有のアドバイス（新規追加）
         let favAdvice = '';
         const highFavItem = Object.keys(globalFavoriteData).map(k => ({t: k, c: globalFavoriteData[k].count})).sort((a,b)=>b.c - a.c)[0];
         if(highFavItem && highFavItem.c > 0) {
@@ -506,7 +492,6 @@
         const sortType = sortFilter.value;
         const displayMode = displayModeFilter.value;
         
-        // 💡 売上データに存在しないが、お気に入りデータだけに存在する作品も網羅できるようにマージ
         let allTitlesSet = new Set();
         let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
         Object.keys(targetData).forEach(t => allTitlesSet.add(t));
@@ -527,11 +512,10 @@
                 japanSales: d.japanSales, overseasSales: d.overseasSales,
                 japanQty: d.japanQty, overseasQty: d.overseasQty,
                 firstDate: d.firstDate, lastDate: d.lastDate,
-                favorites: favObj.count // 💡 お気に入り数
+                favorites: favObj.count
             };
         });
 
-        // 💡 ソート処理（新しくお気に入り数順を追加）
         if (sortType === 'salesDesc') items.sort((a, b) => b.sales - a.sales);
         else if (sortType === 'favoriteDesc') items.sort((a, b) => b.favorites - a.favorites);
         else if (sortType === 'qtyDesc') items.sort((a, b) => b.qty - a.qty);
@@ -561,8 +545,6 @@
             });
         } else {
             container.classList.add('auto-height'); canvas.style.display = 'none'; listContainer.style.display = 'flex'; listContainer.innerHTML = '';
-            
-            // グラフバーの最大基準値を決定
             const maxVal = Math.max(...sorted.map(p => sortType === 'qtyDesc' ? p.qty : p.sales), 1);
 
             sorted.forEach((p, index) => {
@@ -575,7 +557,6 @@
                 let metaText = `売上額: ¥${p.sales.toLocaleString()} (${p.qty}個)`;
                 if (p.overseasSales > 0) metaText += ` ［日本: ¥${p.japanSales.toLocaleString()} / 海外: ¥${p.overseasSales.toLocaleString()}］`;
 
-                // 💡 お気に入り数のバッジ表示（★マーク）を追加
                 itemEl.innerHTML = `
                     <div class="rank-badge ${index < 3 ? 'top3' : ''}">${index + 1}</div>
                     <div class="rank-thumb-wrapper"><img class="rank-thumb" src="${imgUrl || ''}" alt="${p.title}" onerror="this.parentElement.parentElement.classList.add('no-image')"><span class="rank-thumb-fallback">🎨</span></div>
@@ -661,7 +642,7 @@
     function saveSingleElement(elementId, fileNameLabel) {
         const target = document.getElementById(elementId);
         const originalBg = target.style.backgroundColor;
-        if(elementId !== 'block-summary') { target.style.backgroundColor = '#ffffff'; }
+        if(elementId !== 'block-advice') { target.style.backgroundColor = '#ffffff'; }
 
         const hideElements = target.querySelectorAll('.hide-on-capture');
         hideElements.forEach(el => el.style.visibility = 'hidden');
@@ -669,7 +650,7 @@
         let currentHeatmapVal = heatmapMonthFilter.value;
         if(elementId === 'card-heatmap') { updateHeatmapVisibility('all'); }
 
-        html2canvas(target, { scale: 2, backgroundColor: elementId === 'block-summary' ? '#f4f6f9' : '#ffffff', useCORS: true }).then(canvas => {
+        html2canvas(target, { scale: 2, backgroundColor: elementId === 'block-advice' ? '#f4f6f9' : '#ffffff', useCORS: true }).then(canvas => {
             target.style.backgroundColor = originalBg; hideElements.forEach(el => el.style.visibility = 'visible');
             if(elementId === 'card-heatmap') { updateHeatmapVisibility(currentHeatmapVal); }
 
