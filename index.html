@@ -106,7 +106,7 @@
             h1 { font-size: 26px; }
             .file-input-area { padding: 20px; }
             .summary-grid { grid-template-columns: repeat(4, 1fr); gap: 12px; }
-            .card padding { padding: 15px 10px; }
+            .card { padding: 15px 10px; }
             .card p { font-size: 18px; }
             .btn-area { width: auto; }
             .save-btn { width: auto; font-size: 13px; padding: 8px 16px; }
@@ -214,12 +214,16 @@
 
             <div class="chart-container" id="card-trend">
                 <h3>
-                    <span>📈 日別売上推移</span>
+                    <span id="trendTitle">📈 売上推移</span>
                     <div class="filter-group">
+                        <select id="trendUnitFilter" class="month-select">
+                            <option value="daily" selected>📅 日別表示</option>
+                            <option value="weekly">🗓️ 週別表示（合計）</option>
+                        </select>
                         <select id="trendProductFilter" class="month-select" style="max-width: 140px;">
                             <option value="all">すべてのアイテム（全体）</option>
                         </select>
-                        <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-trend', '日別売上推移')">📸 保存</button>
+                        <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-trend', '売上推移')">📸 保存</button>
                     </div>
                 </h3>
                 <canvas id="trendChart"></canvas>
@@ -263,7 +267,9 @@
     const sortFilter = document.getElementById('rankSortFilter');
     const displayModeFilter = document.getElementById('rankDisplayMode');
     const heatmapMonthFilter = document.getElementById('heatmapMonthFilter');
-    const trendProductFilter = document.getElementById('trendProductFilter'); // 🆕
+    const trendProductFilter = document.getElementById('trendProductFilter');
+    const trendUnitFilter = document.getElementById('trendUnitFilter');
+    const trendTitle = document.getElementById('trendTitle');
     
     let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null };
     
@@ -273,7 +279,7 @@
     let globalProductTotals = {};
     let monthlyProductTotals = {};
     let globalDateData = {};
-    let globalProductDateData = {}; // 🆕 アイテム名 -> 日付 -> 売上金額
+    let globalProductDateData = {}; 
     let globalCategoryData = {};
     let globalCountryData = {};
     let rawDates = [];
@@ -298,7 +304,7 @@
         globalProductTotals = {};
         monthlyProductTotals = {};
         globalDateData = {};
-        globalProductDateData = {}; // 🆕
+        globalProductDateData = {}; 
         globalCategoryData = {};
         globalCountryData = {};
         rawDates = [];
@@ -319,7 +325,8 @@
     sortFilter.addEventListener('change', () => { updateRankingChart(); });
     displayModeFilter.addEventListener('change', () => { updateRankingChart(); });
     heatmapMonthFilter.addEventListener('change', () => { updateHeatmapVisibility(heatmapMonthFilter.value); });
-    trendProductFilter.addEventListener('change', () => { updateTrendChartOnly(); }); // 🆕 
+    trendProductFilter.addEventListener('change', () => { updateTrendChartOnly(); }); 
+    trendUnitFilter.addEventListener('change', () => { updateTrendChartOnly(); });
 
     function handleMultipleFiles(files) {
         let filesProcessed = 0;
@@ -483,7 +490,6 @@
             const standardizedDateStr = `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()}`;
             globalDateData[standardizedDateStr] = (globalDateData[standardizedDateStr] || 0) + sales;
             
-            // 🆕 アイテム個別の時系列データを蓄積
             if (!globalProductDateData[title]) globalProductDateData[title] = {};
             globalProductDateData[title][standardizedDateStr] = (globalProductDateData[title][standardizedDateStr] || 0) + sales;
 
@@ -529,7 +535,6 @@
         document.getElementById('totalQty').textContent = `${totalQty.toLocaleString()}個`;
         document.getElementById('analysisPeriod').textContent = `${startDate.toLocaleDateString()}～${endDate.toLocaleDateString()}`;
 
-        // 総合・月別プルダウンの更新
         const currentSelection = monthFilter.value;
         monthFilter.innerHTML = '<option value="all">総合（全期間）</option>';
         Object.keys(monthlyProductTotals).sort().forEach(m => {
@@ -537,7 +542,6 @@
         });
         if ([...monthFilter.options].some(o => o.value === currentSelection)) { monthFilter.value = currentSelection; }
 
-        // 🆕 アイテム個別トレンド用のプルダウンを生成 (売上順にソートして並べる)
         const currentProductSel = trendProductFilter.value;
         trendProductFilter.innerHTML = '<option value="all">すべてのアイテム（全体）</option>';
         Object.keys(globalProductTotals).sort((a,b) => globalProductTotals[b].sales - globalProductTotals[a].sales).forEach(title => {
@@ -558,32 +562,61 @@
         generateAutoAdvice(weekdayAverages, globalCountryData, totalSales, topProductTitle);
     }
 
-    // 🆕 アイテム個別プルダウン切り替え時に、日別トレンドグラフだけを再描画する関数
     function updateTrendChartOnly() {
         if (!rawDates.length || !charts.trend) return;
         
         const selectedProduct = trendProductFilter.value;
+        const unitMode = trendUnitFilter.value;
         const startDate = rawDates[0]; const endDate = rawDates[rawDates.length - 1];
         
-        const filledDateLabels = []; const filledDateValues = [];
-        
-        let curr = new Date(startDate);
-        while (curr <= endDate) {
-            const dStr = `${curr.getFullYear()}/${curr.getMonth()+1}/${curr.getDate()}`;
-            filledDateLabels.push(dStr);
-            
-            if (selectedProduct === 'all') {
-                filledDateValues.push(globalDateData[dStr] || 0);
-            } else {
-                const prodData = globalProductDateData[selectedProduct] || {};
-                filledDateValues.push(prodData[dStr] || 0);
+        let finalLabels = [];
+        let finalValues = [];
+        let labelName = selectedProduct === 'all' ? '売上高' : `${selectedProduct}`;
+
+        if (unitMode === 'daily') {
+            trendTitle.textContent = '📊 日別売上推移';
+            let curr = new Date(startDate);
+            while (curr <= endDate) {
+                const dStr = `${curr.getFullYear()}/${curr.getMonth()+1}/${curr.getDate()}`;
+                finalLabels.push(dStr);
+                if (selectedProduct === 'all') {
+                    finalValues.push(globalDateData[dStr] || 0);
+                } else {
+                    const prodData = globalProductDateData[selectedProduct] || {};
+                    finalValues.push(prodData[dStr] || 0);
+                }
+                curr.setDate(curr.getDate() + 1);
             }
-            curr.setDate(curr.getDate() + 1);
+        } else {
+            trendTitle.textContent = '📊 週別売上合計推移';
+            
+            let currentTrack = new Date(startDate);
+            const currentDay = currentTrack.getDay();
+            const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay; 
+            currentTrack.setDate(currentTrack.getDate() + distanceToMonday);
+
+            while (currentTrack <= endDate) {
+                let weekSum = 0;
+                const weekLabel = `${currentTrack.getFullYear()}/${currentTrack.getMonth()+1}/${currentTrack.getDate()} の週`;
+                
+                for (let i = 0; i < 7; i++) {
+                    const dStr = `${currentTrack.getFullYear()}/${currentTrack.getMonth()+1}/${currentTrack.getDate()}`;
+                    if (selectedProduct === 'all') {
+                        weekSum += (globalDateData[dStr] || 0);
+                    } else {
+                        const prodData = globalProductDateData[selectedProduct] || {};
+                        weekSum += (prodData[dStr] || 0);
+                    }
+                    currentTrack.setDate(currentTrack.getDate() + 1);
+                }
+                finalLabels.push(weekLabel);
+                finalValues.push(weekSum);
+            }
         }
         
-        charts.trend.data.labels = filledDateLabels;
-        charts.trend.data.datasets[0].data = filledDateValues;
-        charts.trend.data.datasets[0].label = selectedProduct === 'all' ? '日別売上' : `${selectedProduct} の売上`;
+        charts.trend.data.labels = finalLabels;
+        charts.trend.data.datasets[0].data = finalValues;
+        charts.trend.data.datasets[0].label = `${labelName} (${unitMode === 'daily' ? '日別' : '週次合計'})`;
         charts.trend.update();
     }
 
@@ -755,12 +788,28 @@
     function renderAllCharts(dateLabels, dateValues, monthlyData, weekdayAverages, categoryData, countryData) {
         Object.keys(charts).forEach(key => { if (charts[key] && key !== 'ranking') { charts[key].destroy(); charts[key] = null; } });
 
-        // 初期描画時はプルダウンに連動して描画するよう変更
+        // 🆕 type を 'line' から 'bar' に変更
         charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
-            type: 'line', data: { labels: dateLabels, datasets: [{ label: '日別売上', data: dateValues, borderColor: '#06C755', backgroundColor: 'rgba(6, 199, 85, 0.05)', borderWidth: 1.5, fill: true, tension: 0.1, pointRadius: 1 }] },
-            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            type: 'bar', 
+            data: { 
+                labels: dateLabels, 
+                datasets: [{ 
+                    label: '売上高', 
+                    data: dateValues, 
+                    backgroundColor: '#06C755', 
+                    borderWidth: 0,
+                    borderRadius: 2
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                scales: { 
+                    y: { beginAtZero: true } 
+                } 
+            }
         });
-        updateTrendChartOnly(); // プルダウンの選択状況を反映
+        updateTrendChartOnly(); // 単位やアイテム選択の初期反映
 
         const mLabels = Object.keys(monthlyData).sort();
         charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
