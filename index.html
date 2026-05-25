@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <link rel="icon" href="favicon.png" type="image/png"><meta charset="UTF-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LINE売上・お気に入り分析ダッシュボード</title>
+    <link rel="icon" href="favicon.png" type="image/png">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -84,7 +85,10 @@
         .rank-title { font-size: 12px; font-weight: bold; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
         .rank-meta { font-size: 10px; color: #555; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
         
+        /* ⭐️ お気に入りバッジ周りの強化 */
         .rank-favorite-badge { font-size: 10px; font-weight: bold; color: #e67e22; background: #fef5e7; padding: 2px 6px; border-radius: 12px; border: 1px solid #fdebd0; z-index: 1; flex-shrink: 0; display: flex; align-items: center; gap: 2px; }
+        .rank-favorite-badge.increased { color: #27ae60; background: #e8f8f5; border-color: #d1f2eb; animation: pulse 2s infinite; }
+        .fav-diff { font-size: 9px; font-weight: 800; margin-left: 2px; }
 
         .rank-bar-container { position: absolute; top: 0; left: 0; bottom: 0; right: 0; display: flex; width: 100%; z-index: 0; pointer-events: none; }
         .rank-bar-japan { background: rgba(6, 199, 85, 0.15); height: 100%; transition: width 0.4s ease; }
@@ -124,6 +128,7 @@
             .rank-title { font-size: 13px; }
             .rank-meta { font-size: 11px; }
             .rank-favorite-badge { font-size: 11px; padding: 3px 8px; gap: 3px; }
+            .fav-diff { font-size: 10px; }
             .heatmap-month-section { padding: 10px; }
             .heatmap-month-title { font-size: 13px; }
             .heatmap-grid { gap: 4px; max-width: 350px; }
@@ -141,7 +146,7 @@
     
     <div class="file-input-area" id="dropArea" onclick="document.getElementById('csvFile').click()">
         <p style="margin: 0; font-size: 13px; font-weight: bold; color: #06C755;">売上CSV・ショップCSV・お気に入り履歴CSVをドロップ</p>
-        <span style="font-size: 10px; color: #7f8c8d;">※売上ファイルを新しく入れると、データはその都度入れ替わります</span>
+        <span style="font-size: 10px; color: #7f8c8d;">※ファイルを新しく入れると、データはその都度入れ替わります</span>
         <input type="file" id="csvFile" accept=".csv" multiple>
     </div>
 
@@ -214,7 +219,7 @@
 
             <div class="chart-container" id="card-trend">
                 <h3>
-                    <span id="trendTitle">📈 売上推移</span>
+                    <span id="trendTitle">📊 売上推移</span>
                     <div class="filter-group">
                         <select id="trendUnitFilter" class="month-select">
                             <option value="daily" selected>📅 日別表示</option>
@@ -274,6 +279,8 @@
     let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null };
     
     let globalShopData = {};
+    
+    // ⭐️ お気に入り履歴データ管理用オブジェクト
     let globalFavoriteData = {};
 
     let globalProductTotals = {};
@@ -352,6 +359,7 @@
             reader.onload = function(e) {
                 const text = e.target.result;
                 if (text.includes('favorite_count') || text.includes('お気に入り')) {
+                    // お気に入りデータの履歴を全解析
                     const count = parseFavoriteCSV(text);
                     loadedFavCount += count;
                 } else if (text.includes('日付') && text.includes('売上')) {
@@ -368,7 +376,7 @@
                 if (filesProcessed === files.length) {
                     let statusParts = [];
                     if (loadedSalesCount > 0) statusParts.push(`📊 売上データ（${loadedSalesCount}件のファイル）を読み込みました。`);
-                    if (loadedFavCount > 0) statusParts.push(`⭐️ お気に入り履歴CSVから計 ${loadedFavCount} 件のデータを同期しました。`);
+                    if (loadedFavCount > 0) statusParts.push(`⭐️ お気に入り履歴CSVから時系列データの同期を完了しました。`);
                     if (loadedShopCount > 0) statusParts.push(`🛍️ ショップCSVから計 ${loadedShopCount} 件の画像情報を同期しました。`);
                     
                     if(statusParts.length > 0) { showStatus(statusParts.join('<br>')); }
@@ -379,6 +387,7 @@
         }
     }
 
+    // ⭐️ 履歴から「最新」と「前回」を自動判別する解析関数
     function parseFavoriteCSV(text) {
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length <= 1) return 0;
@@ -390,7 +399,9 @@
 
         if (titleIdx === -1 || favIdx === -1) return 0;
 
-        let addedCount = 0;
+        // タイトルごとに日付別の数値を一旦すべて集める
+        let rawHistory = {};
+
         for (let i = 1; i < lines.length; i++) {
             const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
             if (!row || row.length <= Math.max(titleIdx, favIdx)) continue;
@@ -400,12 +411,48 @@
             const dateStr = dateIdx !== -1 ? row[dateIdx].replace(/^"|"$/g, '').trim() : '1970/01/01';
             const dateObj = parseSafeDate(dateStr);
 
-            if (!globalFavoriteData[title] || dateObj >= globalFavoriteData[title].date) {
-                globalFavoriteData[title] = { count: favCount, date: dateObj };
-                addedCount++;
+            if (isNaN(dateObj.getTime())) continue;
+
+            if (!rawHistory[title]) {
+                rawHistory[title] = [];
             }
+            rawHistory[title].push({ date: dateObj, count: favCount });
         }
-        return addedCount;
+
+        let processedCount = 0;
+        
+        // 各アイテムごとに日付順に並び替え、「最新（今回）」と「1つ前（前回）」を特定
+        Object.keys(rawHistory).forEach(title => {
+            let records = rawHistory[title];
+            // 日付の古い順にソート
+            records.sort((a, b) => a.date - b.date);
+
+            // 重複日付を除外（同じ日に複数データがある場合は最後のレコードを採用）
+            let uniqueRecords = [];
+            let seenDates = {};
+            for(let j = records.length - 1; j >= 0; j--) {
+                let dKey = records[j].date.toDateString();
+                if(!seenDates[dKey]) {
+                    seenDates[dKey] = true;
+                    uniqueRecords.unshift(records[j]);
+                }
+            }
+
+            if (uniqueRecords.length > 0) {
+                let latest = uniqueRecords[uniqueRecords.length - 1];
+                let previous = uniqueRecords.length >= 2 ? uniqueRecords[uniqueRecords.length - 2] : null;
+
+                globalFavoriteData[title] = {
+                    count: latest.count,
+                    prevCount: previous ? previous.count : latest.count,
+                    diff: previous ? (latest.count - previous.count) : 0,
+                    date: latest.date
+                };
+                processedCount++;
+            }
+        });
+
+        return processedCount;
     }
 
     function parseShopCSV(text) {
@@ -435,11 +482,13 @@
 
     function parseSafeDate(dateStr) {
         if (!dateStr) return new Date(NaN);
-        const parts = dateStr.replace(/"/g, '').trim().split('/');
+        // ハイフン区切り(2026-05-26)にもスラッシュ区切り(2026/5/20)にも対応できるようにブレイクダウン
+        const cleanStr = dateStr.replace(/"/g, '').trim();
+        const parts = cleanStr.includes('-') ? cleanStr.split('-') : cleanStr.split('/');
         if (parts.length === 3) {
             return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
         }
-        return new Date(dateStr.replace(/"/g, '').trim());
+        return new Date(cleanStr);
     }
 
     function parseSalesCSV(text) {
@@ -639,7 +688,7 @@
         
         let overseasAdvice = '';
         if (overseasRatio > 10) {
-            overseasAdvice = `現在、全体の <span class="advice-highlight">${overseasRatio}%</span> が海外からの売上です！言葉の壁がない絵文字や大きめな表現の新作を意識するとさらに伸びる可能性があります。`;
+            overseasAdvice = `現在、全体の <span class="advice-highlight">${overseasRatio}%</span> が海外からの売上です！言葉の壁がない絵文字や大きめな表現 of 新作を意識するとさらに伸びる可能性があります。`;
         } else {
             overseasAdvice = `現在は国内売上が中心です。海外を視野に入れる場合、文字を含まない「イラスト単体で感情が伝わるリアクション系」を展開すると、言葉の壁を超えて見つけてもらいやすくなります。`;
         }
@@ -675,13 +724,14 @@
 
         let items = Array.from(allTitlesSet).map(k => {
             const d = targetData[k] || { sales: 0, qty: 0, japanSales: 0, overseasSales: 0, japanQty: 0, overseasQty: 0, firstDate: new Date(0), lastDate: new Date(0) };
-            const favObj = globalFavoriteData[k] || { count: 0 };
+            const favObj = globalFavoriteData[k] || { count: 0, prevCount: 0, diff: 0 };
             return {
                 title: k, sales: d.sales, qty: d.qty,
                 japanSales: d.japanSales, overseasSales: d.overseasSales,
                 japanQty: d.japanQty, overseasQty: d.overseasQty,
                 firstDate: d.firstDate, lastDate: d.lastDate,
-                favorites: favObj.count
+                favorites: favObj.count,
+                favDiff: favObj.diff
             };
         });
 
@@ -700,7 +750,11 @@
 
         if (displayMode === 'chart') {
             canvas.style.display = 'block'; listContainer.style.display = 'none';
-            const labels = sorted.map(p => { const priceLabel = `[¥${p.sales.toLocaleString()} / ★${p.favorites}]`; return isMobile ? [p.title.length > 10 ? p.title.slice(0, 10) + '...' : p.title, priceLabel] : [p.title, priceLabel]; });
+            const labels = sorted.map(p => { 
+                const diffText = p.favDiff > 0 ? `(+${p.favDiff})` : '';
+                const priceLabel = `[¥${p.sales.toLocaleString()} / ★${p.favorites}${diffText}]`; 
+                return isMobile ? [p.title.length > 10 ? p.title.slice(0, 10) + '...' : p.title, priceLabel] : [p.title, priceLabel]; 
+            });
 
             let dataJapan, dataOverseas, labelJapan, labelOverseas;
             if (sortType === 'qtyDesc') { dataJapan = sorted.map(p => p.japanQty); dataOverseas = sorted.map(p => p.overseasQty); labelJapan = '日本（個）'; labelOverseas = '海外（個）'; } 
@@ -726,11 +780,19 @@
                 let metaText = `¥${p.sales.toLocaleString()} (${p.qty}個)`;
                 if (p.overseasSales > 0) metaText = `計¥${p.sales.toLocaleString()} [日:¥${p.japanSales.toLocaleString()} / 外:¥${p.overseasSales.toLocaleString()}]`;
 
+                // ⭐️ お気に入り増加時のデザイン分岐
+                let favBadgeHtml = ``;
+                if (p.favDiff > 0) {
+                    favBadgeHtml = `<div class="rank-favorite-badge increased">⭐️ ${p.favorites} <span class="fav-diff">(+${p.favDiff})</span></div>`;
+                } else {
+                    favBadgeHtml = `<div class="rank-favorite-badge">⭐️ ${p.favorites}</div>`;
+                }
+
                 itemEl.innerHTML = `
                     <div class="rank-badge ${index < 3 ? 'top3' : ''}">${index + 1}</div>
                     <div class="rank-thumb-wrapper"><img class="rank-thumb" src="${imgUrl || ''}" alt="${p.title}" onerror="this.parentElement.parentElement.classList.add('no-image')"><span class="rank-thumb-fallback">🎨</span></div>
                     <div class="rank-info"><div class="rank-title">${p.title}</div><div class="rank-meta">${metaText}</div></div>
-                    <div class="rank-favorite-badge">⭐️ ${p.favorites}</div>
+                    ${favBadgeHtml}
                     <div class="rank-bar-container"><div class="rank-bar-japan" style="width: ${pctJapan}%"></div><div class="rank-bar-overseas" style="width: ${pctOverseas}%"></div></div>
                 `;
                 listContainer.appendChild(itemEl);
@@ -788,7 +850,6 @@
     function renderAllCharts(dateLabels, dateValues, monthlyData, weekdayAverages, categoryData, countryData) {
         Object.keys(charts).forEach(key => { if (charts[key] && key !== 'ranking') { charts[key].destroy(); charts[key] = null; } });
 
-        // 🆕 type を 'line' から 'bar' に変更
         charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
             type: 'bar', 
             data: { 
@@ -809,7 +870,7 @@
                 } 
             }
         });
-        updateTrendChartOnly(); // 単位やアイテム選択の初期反映
+        updateTrendChartOnly();
 
         const mLabels = Object.keys(monthlyData).sort();
         charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
