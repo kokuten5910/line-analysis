@@ -5,10 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LINE売上・お気に入り分析ダッシュボード</title>
     <link rel="icon" href="favicon.png" type="image/png">
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        /* 📱 全体の横溢れを防ぐ基本設定 */
+        /* 全体の横溢れを防ぐ基本設定 */
         * { box-sizing: border-box; }
         html, body { width: 100%; overflow-x: hidden; margin: 0; padding: 0; }
         
@@ -23,7 +26,6 @@
         .status-message { background-color: #e8f8f5; border: 1px solid #27ae60; color: #27ae60; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 12px; font-weight: bold; text-align: center; display: none; animation: fadeIn 0.3s ease; width: 100%; word-break: break-all; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* 📱 上部サマリーカードをスマホ幅に完全フィット */
         .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px; width: 100%; }
         .card { background: #fff; padding: 12px 8px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; min-width: 0; width: 100%; }
         .card h3 { margin: 0 0 5px 0; color: #7f8c8d; font-size: 11px; }
@@ -42,7 +44,6 @@
         .card-save-btn { background-color: rgba(6, 199, 85, 0.1); color: #06C755; border: none; padding: 3px 10px; font-size: 11px; font-weight: bold; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
         .card-save-btn:hover { background-color: #06C755; color: white; }
 
-        /* 📱 メインのグリッドを横幅100%に固定 */
         .dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 15px; width: 100%; }
         
         .chart-container { 
@@ -59,7 +60,6 @@
         .chart-container.ranking-container { min-height: auto !important; height: auto !important; }
         .chart-container.ranking-container canvas { max-height: 500px; width: 100% !important; }
 
-        /* 📱 各カードの見出し内のメニューがはみ出さないように調整 */
         .chart-container h3 { margin-top: 0; font-size: 13px; color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; width: 100%; }
         .chart-container canvas { max-height: 260px; width: 100% !important; }
         
@@ -68,7 +68,6 @@
         
         .selected-month-total { font-size: 11px; color: #27ae60; font-weight: bold; background: #e8f8f5; padding: 2px 6px; border-radius: 12px; display: inline-block; word-break: break-all; }
 
-        /* 📱 ランキングリストの横幅はみ出し徹底ガード */
         .ranking-list-container { display: none; flex-direction: column; gap: 6px; margin-top: 10px; width: 100%; text-align: left; }
         .ranking-item { display: flex; align-items: center; background: #fff; padding: 8px; border-radius: 6px; position: relative; gap: 8px; border: 1px solid #eef2f5; overflow: hidden; width: 100%; min-width: 0; }
         .rank-badge { font-size: 12px; font-weight: bold; color: #7f8c8d; min-width: 18px; text-align: center; z-index: 1; }
@@ -84,17 +83,16 @@
         .rank-info { flex-grow: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; z-index: 1; }
         .rank-title { font-size: 12px; font-weight: bold; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
         .rank-meta { font-size: 10px; color: #555; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+        .rank-release-date { font-size: 9px; color: #95a5a6; }
         
-        /* ⭐️ お気に入りバッジ周りの強化 */
         .rank-favorite-badge { font-size: 10px; font-weight: bold; color: #e67e22; background: #fef5e7; padding: 2px 6px; border-radius: 12px; border: 1px solid #fdebd0; z-index: 1; flex-shrink: 0; display: flex; align-items: center; gap: 2px; }
-        .rank-favorite-badge.increased { color: #27ae60; background: #e8f8f5; border-color: #d1f2eb; animation: pulse 2s infinite; }
+        .rank-favorite-badge.increased { color: #27ae60; background: #e8f8f5; border-color: #d1f2eb; }
         .fav-diff { font-size: 9px; font-weight: 800; margin-left: 2px; }
 
         .rank-bar-container { position: absolute; top: 0; left: 0; bottom: 0; right: 0; display: flex; width: 100%; z-index: 0; pointer-events: none; }
         .rank-bar-japan { background: rgba(6, 199, 85, 0.15); height: 100%; transition: width 0.4s ease; }
         .rank-bar-overseas { background: rgba(230, 126, 34, 0.15); height: 100%; transition: width 0.4s ease; }
 
-        /* 📱 熱血マップも横幅内に収まるよう自動調整 */
         .heatmap-box { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; width: 100%; }
         .heatmap-month-section { border: 1px solid #eee; padding: 8px; border-radius: 6px; display: none; width: 100%; }
         .heatmap-month-section.active { display: block; }
@@ -104,7 +102,6 @@
         .heatmap-day { aspect-ratio: 1; border-radius: 3px; background-color: #ebedf0; font-size: 9px; display: flex; align-items: center; justify-content: center; color: #7f8c8d; position: relative; font-weight: 500; }
         .heatmap-day.empty { background-color: transparent; }
 
-        /* 💻 タブレット・PCサイズ用スタイル */
         @media (min-width: 768px) {
             body { padding: 15px; }
             h1 { font-size: 26px; }
@@ -145,8 +142,8 @@
     <h1>📊 LINE売上・お気に入り分析ツール</h1>
     
     <div class="file-input-area" id="dropArea" onclick="document.getElementById('csvFile').click()">
-        <p style="margin: 0; font-size: 13px; font-weight: bold; color: #06C755;">売上CSV・ショップCSV・お気に入り履歴CSVをドロップ</p>
-        <span style="font-size: 10px; color: #7f8c8d;">※ファイルを新しく入れると、データはその都度入れ替わります</span>
+        <p style="margin: 0; font-size: 13px; font-weight: bold; color: #06C755;">売上CSV・ショップ(日付)CSV・お気に入り履歴CSVをドロップ</p>
+        <span style="font-size: 10px; color: #7f8c8d;">※ファイルをまとめて一度に入れても、順不同で正しく解析・結合されます</span>
         <input type="file" id="csvFile" accept=".csv" multiple>
     </div>
 
@@ -178,7 +175,8 @@
                             <option value="salesDesc">💰 売上金額順</option>
                             <option value="favoriteDesc">⭐️ お気に入り数順</option>
                             <option value="qtyDesc">📦 売上件数（個数）順</option>
-                            <option value="dateDesc">✨ 最新の売れた順</option>
+                            <option value="dateDesc">✨ 最近売れた順</option>
+                            <option value="releaseDesc">🗓️ 新着販売順</option>
                         </select>
                         <select id="rankMonthFilter" class="month-select">
                             <option value="all">総合（全期間）</option>
@@ -188,6 +186,22 @@
                 </h3>
                 <canvas id="rankingChart"></canvas>
                 <div id="rankingList" class="ranking-list-container"></div>
+            </div>
+
+            <div class="chart-container full-width" id="card-bubble">
+                <h3>
+                    <span>🎈 リリース時期 × 累計売上のバブルチャート（円の大きさ＝お気に入り需要）</span>
+                    <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-bubble', 'リリース時期バブルチャート')">📸 保存</button>
+                </h3>
+                <canvas id="bubbleChart"></canvas>
+            </div>
+
+            <div class="chart-container full-width" id="card-lifecycle">
+                <h3>
+                    <span>📈 経過日数別の累積売上カーブ（作品寿命と成長速度の比較）</span>
+                    <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-lifecycle', '作品別累積売上成長カーブ')">📸 保存</button>
+                </h3>
+                <canvas id="lifecycleChart"></canvas>
             </div>
 
             <div class="chart-container" id="card-heatmap">
@@ -234,10 +248,18 @@
                 <canvas id="trendChart"></canvas>
             </div>
 
+            <div class="chart-container" id="card-pure-month">
+                <h3>
+                    <span>💸 月別売上高の推移（純金純増ベース）</span>
+                    <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-pure-month', '月別売上額推移')">📸 保存</button>
+                </h3>
+                <canvas id="pureMonthChart"></canvas>
+            </div>
+
             <div class="chart-container" id="card-month">
                 <h3>
-                    <span>🗓️ 月別売上推移</span>
-                    <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-month', '月別売上推移')">📸 保存</button>
+                    <span>🗓️ 月別売上構成比（新作比率 vs 過去作ストック比率）</span>
+                    <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-month', '月別売上構成比')">📸 保存</button>
                 </h3>
                 <canvas id="monthChart"></canvas>
             </div>
@@ -276,11 +298,9 @@
     const trendUnitFilter = document.getElementById('trendUnitFilter');
     const trendTitle = document.getElementById('trendTitle');
     
-    let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null };
+    let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null, lifecycle: null, bubble: null, pureMonth: null };
     
-    let globalShopData = {};
-    
-    // ⭐️ お気に入り履歴データ管理用オブジェクト
+    let globalShopData = {}; 
     let globalFavoriteData = {};
 
     let globalProductTotals = {};
@@ -359,14 +379,13 @@
             reader.onload = function(e) {
                 const text = e.target.result;
                 if (text.includes('favorite_count') || text.includes('お気に入り')) {
-                    // お気に入りデータの履歴を全解析
                     const count = parseFavoriteCSV(text);
                     loadedFavCount += count;
                 } else if (text.includes('日付') && text.includes('売上')) {
                     parseSalesCSV(text);
                     loadedSalesCount++;
-                } else if (text.includes('画像URL') || text.includes('ショップURL')) {
-                    const count = parseShopCSV(text);
+                } else if (text.includes('販売開始日') || text.includes('画像URL') || text.includes('サムネイルURL')) {
+                    const count = parseExtendedShopCSV(text);
                     loadedShopCount += count;
                 } else {
                     alert(`「${file.name}」は認識できないCSV形式です。`);
@@ -376,8 +395,8 @@
                 if (filesProcessed === files.length) {
                     let statusParts = [];
                     if (loadedSalesCount > 0) statusParts.push(`📊 売上データ（${loadedSalesCount}件のファイル）を読み込みました。`);
-                    if (loadedFavCount > 0) statusParts.push(`⭐️ お気に入り履歴CSVから時系列データの同期を完了しました。`);
-                    if (loadedShopCount > 0) statusParts.push(`🛍️ ショップCSVから計 ${loadedShopCount} 件の画像情報を同期しました。`);
+                    if (loadedFavCount > 0) statusParts.push(`⭐️ お気に入り履歴の同期を完了しました。`);
+                    if (loadedShopCount > 0) statusParts.push(`🛍️ スキャンCSVから計 ${loadedShopCount} 件の「販売開始日」と画像を同期しました。`);
                     
                     if(statusParts.length > 0) { showStatus(statusParts.join('<br>')); }
                     refreshDashboard();
@@ -387,7 +406,44 @@
         }
     }
 
-    // ⭐️ 履歴から「最新」と「前回」を自動判別する解析関数
+    function parseExtendedShopCSV(text) {
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length <= 1) return 0;
+        
+        const header = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.replace(/^"|"$/g, '').trim());
+        const titleIdx = header.indexOf('タイトル');
+        
+        let imgIdx = header.indexOf('サムネイルURL');
+        if (imgIdx === -1) imgIdx = header.indexOf('画像URL');
+        const releaseIdx = header.indexOf('販売開始日');
+        if (titleIdx === -1) return 0;
+        
+        let addedCount = 0;
+        for (let i = 1; i < lines.length; i++) {
+            const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+            if (!row || row.length <= titleIdx) continue;
+            
+            const title = row[titleIdx].replace(/^"|"$/g, '').trim();
+            if (!title) continue;
+
+            if (!globalShopData[title]) {
+                globalShopData[title] = { imgUrl: null, releaseDate: null };
+            }
+            if (imgIdx !== -1 && row[imgIdx]) {
+                globalShopData[title].imgUrl = row[imgIdx].replace(/^"|"$/g, '').trim();
+            }
+            if (releaseIdx !== -1 && row[releaseIdx]) {
+                const rDateStr = row[releaseIdx].replace(/^"|"$/g, '').trim();
+                const rDateObj = parseSafeDate(rDateStr);
+                if (!isNaN(rDateObj.getTime())) {
+                    globalShopData[title].releaseDate = rDateObj;
+                }
+            }
+            addedCount++;
+        }
+        return addedCount;
+    }
+
     function parseFavoriteCSV(text) {
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length <= 1) return 0;
@@ -399,9 +455,7 @@
 
         if (titleIdx === -1 || favIdx === -1) return 0;
 
-        // タイトルごとに日付別の数値を一旦すべて集める
         let rawHistory = {};
-
         for (let i = 1; i < lines.length; i++) {
             const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
             if (!row || row.length <= Math.max(titleIdx, favIdx)) continue;
@@ -413,21 +467,15 @@
 
             if (isNaN(dateObj.getTime())) continue;
 
-            if (!rawHistory[title]) {
-                rawHistory[title] = [];
-            }
+            if (!rawHistory[title]) rawHistory[title] = [];
             rawHistory[title].push({ date: dateObj, count: favCount });
         }
 
         let processedCount = 0;
-        
-        // 各アイテムごとに日付順に並び替え、「最新（今回）」と「1つ前（前回）」を特定
         Object.keys(rawHistory).forEach(title => {
             let records = rawHistory[title];
-            // 日付の古い順にソート
             records.sort((a, b) => a.date - b.date);
 
-            // 重複日付を除外（同じ日に複数データがある場合は最後のレコードを採用）
             let uniqueRecords = [];
             let seenDates = {};
             for(let j = records.length - 1; j >= 0; j--) {
@@ -455,34 +503,8 @@
         return processedCount;
     }
 
-    function parseShopCSV(text) {
-        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-        if (lines.length <= 1) return 0;
-        
-        const header = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.replace(/^"|"$/g, '').trim());
-        const titleIdx = header.indexOf('タイトル');
-        const imgIdx = header.indexOf('画像URL');
-        
-        if (titleIdx === -1 || imgIdx === -1) return 0;
-        
-        let addedCount = 0;
-        for (let i = 1; i < lines.length; i++) {
-            const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-            if (!row || row.length <= Math.max(titleIdx, imgIdx)) continue;
-            
-            const title = row[titleIdx].replace(/^"|"$/g, '').trim();
-            const imgUrl = row[imgIdx].replace(/^"|"$/g, '').trim();
-            if (title && imgUrl) { 
-                globalShopData[title] = imgUrl; 
-                addedCount++;
-            }
-        }
-        return addedCount;
-    }
-
     function parseSafeDate(dateStr) {
         if (!dateStr) return new Date(NaN);
-        // ハイフン区切り(2026-05-26)にもスラッシュ区切り(2026/5/20)にも対応できるようにブレイクダウン
         const cleanStr = dateStr.replace(/"/g, '').trim();
         const parts = cleanStr.includes('-') ? cleanStr.split('-') : cleanStr.split('/');
         if (parts.length === 3) {
@@ -564,16 +586,13 @@
         
         const filledDateLabels = []; const filledDateValues = [];
         const weekdaySales = Array(7).fill(0); const weekdayCounts = Array(7).fill(0);
-        const monthlySummary = {}; 
 
         let curr = new Date(startDate);
         while (curr <= endDate) {
             const dStr = `${curr.getFullYear()}/${curr.getMonth()+1}/${curr.getDate()}`;
-            const mKey = `${curr.getFullYear()}/${String(curr.getMonth()+1).padStart(2, '0')}`;
             const s = globalDateData[dStr] || 0;
             filledDateLabels.push(dStr); filledDateValues.push(s);
             weekdaySales[curr.getDay()] += s; weekdayCounts[curr.getDay()] += 1;
-            monthlySummary[mKey] = (monthlySummary[mKey] || 0) + s;
             curr.setDate(curr.getDate() + 1);
         }
 
@@ -605,21 +624,20 @@
             document.getElementById('topProduct').textContent = topProductTitle;
         }
 
-        renderAllCharts(filledDateLabels, filledDateValues, monthlySummary, weekdayAverages, globalCategoryData, globalCountryData);
+        renderAllCharts(filledDateLabels, filledDateValues, weekdayAverages, globalCategoryData, globalCountryData);
         updateRankingChart();
         generateHeatmap(startDate, endDate);
         generateAutoAdvice(weekdayAverages, globalCountryData, totalSales, topProductTitle);
     }
 
-    function updateTrendChartOnly() {
+    updateTrendChartOnly = function() {
         if (!rawDates.length || !charts.trend) return;
         
         const selectedProduct = trendProductFilter.value;
         const unitMode = trendUnitFilter.value;
         const startDate = rawDates[0]; const endDate = rawDates[rawDates.length - 1];
         
-        let finalLabels = [];
-        let finalValues = [];
+        let finalLabels = []; let finalValues = [];
         let labelName = selectedProduct === 'all' ? '売上高' : `${selectedProduct}`;
 
         if (unitMode === 'daily') {
@@ -628,17 +646,12 @@
             while (curr <= endDate) {
                 const dStr = `${curr.getFullYear()}/${curr.getMonth()+1}/${curr.getDate()}`;
                 finalLabels.push(dStr);
-                if (selectedProduct === 'all') {
-                    finalValues.push(globalDateData[dStr] || 0);
-                } else {
-                    const prodData = globalProductDateData[selectedProduct] || {};
-                    finalValues.push(prodData[dStr] || 0);
-                }
+                if (selectedProduct === 'all') finalValues.push(globalDateData[dStr] || 0);
+                else { const prodData = globalProductDateData[selectedProduct] || {}; finalValues.push(prodData[dStr] || 0); }
                 curr.setDate(curr.getDate() + 1);
             }
         } else {
             trendTitle.textContent = '📊 週別売上合計推移';
-            
             let currentTrack = new Date(startDate);
             const currentDay = currentTrack.getDay();
             const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay; 
@@ -647,26 +660,17 @@
             while (currentTrack <= endDate) {
                 let weekSum = 0;
                 const weekLabel = `${currentTrack.getFullYear()}/${currentTrack.getMonth()+1}/${currentTrack.getDate()} の週`;
-                
                 for (let i = 0; i < 7; i++) {
                     const dStr = `${currentTrack.getFullYear()}/${currentTrack.getMonth()+1}/${currentTrack.getDate()}`;
-                    if (selectedProduct === 'all') {
-                        weekSum += (globalDateData[dStr] || 0);
-                    } else {
-                        const prodData = globalProductDateData[selectedProduct] || {};
-                        weekSum += (prodData[dStr] || 0);
-                    }
+                    if (selectedProduct === 'all') weekSum += (globalDateData[dStr] || 0);
+                    else { const prodData = globalProductDateData[selectedProduct] || {}; weekSum += (prodData[dStr] || 0); }
                     currentTrack.setDate(currentTrack.getDate() + 1);
                 }
-                finalLabels.push(weekLabel);
-                finalValues.push(weekSum);
+                finalLabels.push(weekLabel); finalValues.push(weekSum);
             }
         }
-        
-        charts.trend.data.labels = finalLabels;
-        charts.trend.data.datasets[0].data = finalValues;
-        charts.trend.data.datasets[0].label = `${labelName} (${unitMode === 'daily' ? '日別' : '週次合計'})`;
-        charts.trend.update();
+        charts.trend.data.labels = finalLabels; charts.trend.data.datasets[0].data = finalValues;
+        charts.trend.data.datasets[0].label = `${labelName} (${unitMode === 'daily' ? '日別' : '週次合計'})`; charts.trend.update();
     }
 
     function generateAutoAdvice(weekdayAverages, countryData, totalSales, topProduct) {
@@ -688,19 +692,43 @@
         
         let overseasAdvice = '';
         if (overseasRatio > 10) {
-            overseasAdvice = `現在、全体の <span class="advice-highlight">${overseasRatio}%</span> が海外からの売上です！言葉の壁がない絵文字や大きめな表現 of 新作を意識するとさらに伸びる可能性があります。`;
+            overseasAdvice = `現在、全体の <span class="advice-highlight">${overseasRatio}%</span> が海外からの売上です！言葉の壁がない絵文字や大きめな表現を意識するとさらに伸びる可能性があります。`;
         } else {
-            overseasAdvice = `現在は国内売上が中心です。海外を視野に入れる場合、文字を含まない「イラスト単体で感情が伝わるリアクション系」を展開すると、言葉の壁を超えて見つけてもらいやすくなります。`;
+            overseasAdvice = `現在は国内売上が中心です。海外を視野に入れる場合、文字を含まない「イラスト単体で感情が伝わるリアクション系」を展開すると、言葉の壁を超えて世界で見つけてもらいやすくなります。`;
         }
 
-        let productAdvice = '';
-        if (topProduct && topProduct !== '-') {
-            productAdvice = `現在の稼ぎ頭は「<span class="advice-highlight">${topProduct}</span>」です。このキャラクターの別バージョン（日常会話、敬語版、またはスタンプと絵文字の相互展開）を作ることで、既存ファンがセットで購入してくれるリピート効果が期待できます。`;
+        let recentReleaseSales = 0;
+        let activeProductsCount = 0;
+        let totalRankedSales = 0;
+
+        Object.keys(globalProductTotals).forEach(title => {
+            const p = globalProductTotals[title];
+            totalRankedSales += p.sales;
+            const info = globalShopData[title];
+            if (info && info.releaseDate) {
+                const daysOld = (new Date() - info.releaseDate) / (1000 * 60 * 60 * 24);
+                if (daysOld <= 45) {
+                    recentReleaseSales += p.sales;
+                }
+            }
+            if (p.sales > 0) activeProductsCount++;
+        });
+
+        let releaseAdvice = '';
+        if (totalRankedSales > 0) {
+            const recentRatio = Math.round((recentReleaseSales / totalRankedSales) * 100);
+            if (recentRatio > 35) {
+                releaseAdvice = `直近リリースの新作が全体の売上の <span class="advice-highlight">${recentRatio}%</span> を叩き出しており、<span class="advice-highlight">新作ブースト状態</span>が非常に好調です！この波があるうちに次の関連バリエーションを仕込むのが必勝パターンです。`;
+            } else if (recentRatio > 0) {
+                releaseAdvice = `現在の売上の大半は、リリースから時間が経った過去作が維持しています（ロングセラー化）。土台が安定しているので、新作を出すたびに売上がまるごと上乗せされる最高の状態です。`;
+            } else {
+                releaseAdvice = `全アイテム数 ${activeProductsCount} 個のショップ運営です。販売開始日のデータが同期されました。新作をリリースした直後はLINE側の新着露出が増えるため、定期的な新作投入が全体の底上げに繋がります。`;
+            }
         }
 
         if (bestDay) adviceList.innerHTML += `<li><strong>📅 曜日別の傾向：</strong> ${weekdayAdvice}</li>`;
         adviceList.innerHTML += `<li><strong>🌏 海外比率：</strong> ${overseasAdvice}</li>`;
-        if (productAdvice) adviceList.innerHTML += `<li><strong>👑 エースの活用：</strong> ${productAdvice}</li>`;
+        if (releaseAdvice) adviceList.innerHTML += `<li><strong>📈 リリース効率：</strong> ${releaseAdvice}</li>`;
 
         adviceArea.style.display = 'block';
     }
@@ -714,6 +742,7 @@
         let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
         Object.keys(targetData).forEach(t => allTitlesSet.add(t));
         Object.keys(globalFavoriteData).forEach(t => allTitlesSet.add(t));
+        Object.keys(globalShopData).forEach(t => allTitlesSet.add(t));
 
         let totalMonthSales = 0; let totalMonthQty = 0;
         Object.keys(targetData).forEach(k => { totalMonthSales += targetData[k].sales; totalMonthQty += targetData[k].qty; });
@@ -725,20 +754,28 @@
         let items = Array.from(allTitlesSet).map(k => {
             const d = targetData[k] || { sales: 0, qty: 0, japanSales: 0, overseasSales: 0, japanQty: 0, overseasQty: 0, firstDate: new Date(0), lastDate: new Date(0) };
             const favObj = globalFavoriteData[k] || { count: 0, prevCount: 0, diff: 0 };
+            const shop = globalShopData[k] || { imgUrl: null, releaseDate: null };
             return {
                 title: k, sales: d.sales, qty: d.qty,
                 japanSales: d.japanSales, overseasSales: d.overseasSales,
                 japanQty: d.japanQty, overseasQty: d.overseasQty,
                 firstDate: d.firstDate, lastDate: d.lastDate,
-                favorites: favObj.count,
-                favDiff: favObj.diff
+                favorites: favObj.count, favDiff: favObj.diff,
+                imgUrl: shop.imgUrl,
+                releaseDate: shop.releaseDate
             };
-        });
+        }).filter(item => item.sales > 0 || item.favorites > 0 || item.releaseDate);
 
         if (sortType === 'salesDesc') items.sort((a, b) => b.sales - a.sales);
         else if (sortType === 'favoriteDesc') items.sort((a, b) => b.favorites - a.favorites);
         else if (sortType === 'qtyDesc') items.sort((a, b) => b.qty - a.qty);
         else if (sortType === 'dateDesc') items.sort((a, b) => b.lastDate - a.lastDate);
+        else if (sortType === 'releaseDesc') {
+            items.sort((a, b) => {
+                if(!a.releaseDate) return 1; if(!b.releaseDate) return -1;
+                return b.releaseDate - a.releaseDate;
+            });
+        }
 
         const isMobile = window.innerWidth < 768;
         const displayCount = 15; const sorted = items.slice(0, displayCount);
@@ -770,7 +807,7 @@
             const maxVal = Math.max(...sorted.map(p => sortType === 'qtyDesc' ? p.qty : p.sales), 1);
 
             sorted.forEach((p, index) => {
-                const imgUrl = globalShopData[p.title];
+                const imgUrl = p.imgUrl;
                 const valJapan = sortType === 'qtyDesc' ? p.japanQty : p.japanSales;
                 const pctJapan = (valJapan / maxVal) * 100;
                 const valOverseas = sortType === 'qtyDesc' ? p.overseasQty : p.overseasSales;
@@ -780,7 +817,8 @@
                 let metaText = `¥${p.sales.toLocaleString()} (${p.qty}個)`;
                 if (p.overseasSales > 0) metaText = `計¥${p.sales.toLocaleString()} [日:¥${p.japanSales.toLocaleString()} / 外:¥${p.overseasSales.toLocaleString()}]`;
 
-                // ⭐️ お気に入り増加時のデザイン分岐
+                const releaseLabel = p.releaseDate ? `⏱️ 販売開始: ${p.releaseDate.getFullYear()}/${p.releaseDate.getMonth()+1}/${p.releaseDate.getDate()}` : '⏱️ 販売開始: 不明';
+
                 let favBadgeHtml = ``;
                 if (p.favDiff > 0) {
                     favBadgeHtml = `<div class="rank-favorite-badge increased">⭐️ ${p.favorites} <span class="fav-diff">(+${p.favDiff})</span></div>`;
@@ -791,7 +829,11 @@
                 itemEl.innerHTML = `
                     <div class="rank-badge ${index < 3 ? 'top3' : ''}">${index + 1}</div>
                     <div class="rank-thumb-wrapper"><img class="rank-thumb" src="${imgUrl || ''}" alt="${p.title}" onerror="this.parentElement.parentElement.classList.add('no-image')"><span class="rank-thumb-fallback">🎨</span></div>
-                    <div class="rank-info"><div class="rank-title">${p.title}</div><div class="rank-meta">${metaText}</div></div>
+                    <div class="rank-info">
+                        <div class="rank-title">${p.title}</div>
+                        <div class="rank-meta">${metaText}</div>
+                        <div class="rank-release-date">${releaseLabel}</div>
+                    </div>
                     ${favBadgeHtml}
                     <div class="rank-bar-container"><div class="rank-bar-japan" style="width: ${pctJapan}%"></div><div class="rank-bar-overseas" style="width: ${pctOverseas}%"></div></div>
                 `;
@@ -847,47 +889,237 @@
         sections.forEach(sec => { if (selectedValue === 'all' || sec.getAttribute('data-month') === selectedValue) { sec.classList.add('active'); } else { sec.classList.remove('active'); } });
     }
 
-    function renderAllCharts(dateLabels, dateValues, monthlyData, weekdayAverages, categoryData, countryData) {
+    function renderAllCharts(dateLabels, dateValues, weekdayAverages, categoryData, countryData) {
         Object.keys(charts).forEach(key => { if (charts[key] && key !== 'ranking') { charts[key].destroy(); charts[key] = null; } });
 
+        // トレンド日別
         charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
             type: 'bar', 
-            data: { 
-                labels: dateLabels, 
-                datasets: [{ 
-                    label: '売上高', 
-                    data: dateValues, 
-                    backgroundColor: '#06C755', 
-                    borderWidth: 0,
-                    borderRadius: 2
-                }] 
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                scales: { 
-                    y: { beginAtZero: true } 
-                } 
-            }
+            data: { labels: dateLabels, datasets: [{ label: '売上高', data: dateValues, backgroundColor: '#06C755', borderRadius: 2 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
         updateTrendChartOnly();
 
-        const mLabels = Object.keys(monthlyData).sort();
-        charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
-            type: 'bar', data: { labels: mLabels, datasets: [{ label: '月別売上', data: mLabels.map(m => monthlyData[m]), backgroundColor: '#9b59b6', borderRadius: 4 }] },
-            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
-        });
-
+        // 曜日別
         charts.weekday = new Chart(document.getElementById('weekdayChart').getContext('2d'), {
             type: 'bar', data: { labels: ['日','月','火','水','木','金','土'], datasets: [{ label: '平均売上', data: weekdayAverages, backgroundColor: ['#e74c3c','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#06C755'], borderRadius: 4 }] },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
 
+        // カテゴリ・国別
         const cLabels = Object.keys(categoryData);
         charts.category = new Chart(document.getElementById('categoryChart').getContext('2d'), { type: 'doughnut', data: { labels: cLabels, datasets: [{ data: cLabels.map(c => categoryData[c]), backgroundColor: ['#2ecc71', '#e67e22'] }] }, options: { responsive: true, maintainAspectRatio: false } });
 
         const coLabels = Object.keys(countryData); const countryColors = ['#06C755', '#e67e22', '#e74c3c', '#9b59b6', '#f1c40f'];
         charts.country = new Chart(document.getElementById('countryChart').getContext('2d'), { type: 'doughnut', data: { labels: coLabels, datasets: [{ data: coLabels.map(co => countryData[co]), backgroundColor: countryColors.slice(0, coLabels.length) }] }, options: { responsive: true, maintainAspectRatio: false } });
+
+        // ==========================================
+        // 📈 分析①: 経過日数別 累積売上成長カーブ
+        // ==========================================
+        if (rawDates.length > 0) {
+            const top5Products = Object.keys(globalProductTotals)
+                .filter(title => globalShopData[title] && globalShopData[title].releaseDate)
+                .sort((a, b) => globalProductTotals[b].sales - globalProductTotals[a].sales)
+                .slice(0, 5);
+
+            const maxDays = 60; 
+            const lifecycleDatasets = [];
+            const colors = ['#e74c3c', '#3498db', '#9b59b6', '#f1c40f', '#1abc9c'];
+
+            top5Products.forEach((title, idx) => {
+                const releaseDate = globalShopData[title].releaseDate;
+                const dailyAccum = Array(maxDays + 1).fill(0);
+                let runningSum = 0;
+
+                for (let d = 0; d <= maxDays; d++) {
+                    const checkDate = new Date(releaseDate);
+                    checkDate.setDate(checkDate.getDate() + d);
+                    const dStr = `${checkDate.getFullYear()}/${checkDate.getMonth()+1}/${checkDate.getDate()}`;
+                    
+                    const daySales = (globalProductDateData[title] && globalProductDateData[title][dStr]) || 0;
+                    runningSum += daySales;
+                    dailyAccum[d] = runningSum;
+                }
+
+                lifecycleDatasets.push({
+                    label: title,
+                    data: dailyAccum,
+                    borderColor: colors[idx % colors.length],
+                    backgroundColor: 'transparent',
+                    borderWidth: 3,
+                    pointRadius: 2,
+                    tension: 0.1
+                });
+            });
+
+            const xLabels = Array.from({length: maxDays + 1}, (_, i) => `${i}日`);
+            charts.lifecycle = new Chart(document.getElementById('lifecycleChart').getContext('2d'), {
+                type: 'line',
+                data: { labels: xLabels, datasets: lifecycleDatasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+                    scales: { y: { beginAtZero: true, title: { display: true, text: '累積売上高 (円)', font: { size: 10 } } }, x: { title: { display: true, text: '発売開始からの経過日数', font: { size: 10 } } } }
+                }
+            });
+        }
+
+        // ==========================================
+        // 🎈 分析②: リリース時期 × 累計売上のバブルチャート
+        // ==========================================
+        const bubbleDataPoints = [];
+        Object.keys(globalProductTotals).forEach(title => {
+            const prod = globalProductTotals[title];
+            const shop = globalShopData[title];
+            if (shop && shop.releaseDate) {
+                const favCount = (globalFavoriteData[title] && globalFavoriteData[title].count) || prod.qty; 
+                const radiusSize = Math.max(5, Math.min(30, favCount * 1.2)); // 視認しやすいサイズに最適化
+
+                bubbleDataPoints.push({
+                    x: shop.releaseDate.getTime(), // timeアダプター用にミリ秒に変換
+                    y: prod.sales,
+                    r: radiusSize,
+                    title: title,
+                    favs: (globalFavoriteData[title] && globalFavoriteData[title].count) || 0,
+                    qty: prod.qty
+                });
+            }
+        });
+
+        charts.bubble = new Chart(document.getElementById('bubbleChart').getContext('2d'), {
+            type: 'bubble',
+            data: {
+                datasets: [{
+                    label: 'アイテム一覧',
+                    data: bubbleDataPoints,
+                    backgroundColor: 'rgba(6, 199, 85, 0.6)',
+                    borderColor: '#049e43',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const p = context.raw;
+                                const d = new Date(p.x);
+                                const dateStr = `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
+                                return [
+                                    `作品: ${p.title}`,
+                                    `発売日: ${dateStr}`,
+                                    `累計売上: ¥${p.y.toLocaleString()}`,
+                                    `お気に入り数: ★${p.favs} (個数: ${p.qty}個)`
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'month', displayFormats: { month: 'yyyy/MM' } },
+                        title: { display: true, text: '販売開始日 (リリース時期)', font: { size: 11 } },
+                        ticks: { font: { size: 10 }, autoSkip: true }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: '累計売上金額 (円)', font: { size: 11 } }
+                    }
+                }
+            }
+        });
+
+        // ==========================================
+        // 📊 月別データの計算（純売上高 ＆ 100%構成比用）
+        // ==========================================
+        const allMonths = Object.keys(monthlyProductTotals).sort();
+        const pureMonthSales = [];
+        const newProductSalesByMonth = [];
+        const oldProductSalesByMonth = [];
+
+        allMonths.forEach(mKey => {
+            let monthTotal = 0;
+            let newSales = 0;
+            let oldSales = 0;
+
+            const match = mKey.match(/(\d+)年(\d+)月/);
+            const currentMonthStart = match ? new Date(parseInt(match[1]), parseInt(match[2]) - 1, 1) : null;
+
+            const currentMonthProducts = monthlyProductTotals[mKey];
+            Object.keys(currentMonthProducts).forEach(title => {
+                const prodSales = currentMonthProducts[title].sales;
+                monthTotal += prodSales;
+                const shopInfo = globalShopData[title];
+
+                if (shopInfo && shopInfo.releaseDate && currentMonthStart) {
+                    const rDate = shopInfo.releaseDate;
+                    // 同年同月リリース判定を厳密化
+                    if (rDate.getFullYear() === currentMonthStart.getFullYear() && rDate.getMonth() === currentMonthStart.getMonth()) {
+                        newSales += prodSales;
+                    } else {
+                        oldSales += prodSales;
+                    }
+                } else {
+                    oldSales += prodSales;
+                }
+            });
+
+            pureMonthSales.push(monthTotal);
+
+            if (monthTotal > 0) {
+                newProductSalesByMonth.push(Math.round((newSales / monthTotal) * 100));
+                oldProductSalesByMonth.push(Math.round((oldSales / monthTotal) * 100));
+            } else {
+                newProductSalesByMonth.push(0);
+                oldProductSalesByMonth.push(0);
+            }
+        });
+
+        // 💸 純粋な月別売上高の折れ線/棒グラフ
+        charts.pureMonth = new Chart(document.getElementById('pureMonthChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: allMonths,
+                datasets: [{
+                    label: '月間総売上（円）',
+                    data: pureMonthSales,
+                    backgroundColor: 'rgba(52, 152, 219, 0.2)',
+                    borderColor: '#3498db',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#3498db',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, ticks: { callback: (v) => `¥${v.toLocaleString()}` } } }
+            }
+        });
+
+        // 🔄 構成比グラフ
+        charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: allMonths,
+                datasets: [
+                    { label: '新作（同月内リリース）', data: newProductSalesByMonth, backgroundColor: '#06C755' },
+                    { label: '過去作（ストック資産）', data: oldProductSalesByMonth, backgroundColor: '#bdc3c7' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw}%` } } },
+                scales: { x: { stacked: true }, y: { stacked: true, max: 100, ticks: { callback: (v) => `${v}%` } } }
+            }
+        });
     }
 
     function saveSingleElement(elementId, fileNameLabel) {
