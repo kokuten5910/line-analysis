@@ -31,11 +31,14 @@
         .card h3 { margin: 0 0 5px 0; color: #7f8c8d; font-size: 11px; }
         .card p { margin: 0; font-size: 16px; font-weight: bold; color: #2c3e50; word-break: break-all; }
         
-        .advice-container { background: #fff; border: 1px solid #e1f7e7; border-left: 6px solid #06C755; padding: 12px 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: left; display: none; width: 100%; }
-        .advice-title { font-size: 14px; font-weight: bold; color: #06C755; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-        .advice-list { margin: 0; padding-left: 15px; font-size: 12px; color: #2c3e50; line-height: 1.5; }
-        .advice-list li { margin-bottom: 6px; }
+        .advice-container { background: #fff; border: 1px solid #e1f7e7; border-left: 6px solid #06C755; padding: 15px 18px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: left; display: none; width: 100%; }
+        .advice-title { font-size: 15px; font-weight: bold; color: #06C755; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px dashed #06C755; padding-bottom: 6px; }
+        .advice-list { margin: 0; padding-left: 0; list-style: none; font-size: 12px; color: #2c3e50; line-height: 1.6; }
+        .advice-list li { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px dashed #f0f0f0; }
+        .advice-list li:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+        .advice-section-title { font-weight: bold; color: #2c3e50; font-size: 13px; margin-bottom: 4px; display: flex; align-items: center; gap: 4px; }
         .advice-highlight { font-weight: bold; color: #06C755; background: #f0fdf4; padding: 1px 4px; border-radius: 3px; }
+        .advice-nextaction { display: block; background: #f8f9fa; border-left: 3px solid #3498db; padding: 6px 10px; margin-top: 6px; font-size: 11px; color: #555; border-radius: 0 4px 4px 0; }
 
         .btn-area { text-align: right; margin-bottom: 15px; display: flex; justify-content: flex-end; gap: 8px; width: 100%; }
         .save-btn { background-color: #2ecc71; color: white; border: none; padding: 8px 14px; font-size: 12px; font-weight: bold; border-radius: 20px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 100%; text-align: center; }
@@ -144,8 +147,9 @@
             .heatmap-grid { gap: 4px; max-width: 350px; }
             .heatmap-day { font-size: 10px; }
             .advice-container { padding: 15px 20px; }
-            .advice-title { font-size: 15px; }
-            .advice-list { font-size: 13px; padding-left: 20px; }
+            .advice-title { font-size: 16px; }
+            .advice-list li { font-size: 13px; }
+            .advice-nextaction { font-size: 12px; }
         }
     </style>
 </head>
@@ -350,7 +354,7 @@
                 <button class="card-save-btn" onclick="saveSingleElement('block-advice', 'クリエイター販売戦略アドバイス')">📸 このアドバイスだけ保存</button>
             </div>
             <div class="advice-container" id="adviceArea" style="margin-top: 0;">
-                <div class="advice-title">💡 クリエイター販売戦略アドバイス</div>
+                <div class="advice-title">💡 クリエイター販売戦略アドバイス（詳細強化版）</div>
                 <ul class="advice-list" id="adviceList"></ul>
             </div>
         </div>
@@ -711,7 +715,6 @@
         });
         if ([...logMonthFilter.options].some(o => o.value === currentLogSel)) { logMonthFilter.value = currentLogSel; }
 
-        // ✨ 追加機能: 売上推移用の月別選択フィルタの同期
         const currentTrendMonthSel = trendMonthFilter.value;
         trendMonthFilter.innerHTML = '<option value="all">全期間表示</option>';
         allMonthsSorted.forEach(m => {
@@ -843,7 +846,6 @@
         }
     }
 
-    // ✨ アップデート機能：日別売上グラフの全期間・月ごとの表示切り替えロジック
     updateTrendChartOnly = function() {
         if (!rawDates.length || !charts.trend) return;
         
@@ -854,14 +856,13 @@
         let loopStartDate = new Date(rawDates[0]);
         let loopEndDate = new Date(rawDates[rawDates.length - 1]);
 
-        // 特定の月が選択されている場合、描画ループの開始日・終了日をその月の1日〜末日に限定する
         if (selectedMonth !== 'all') {
             const match = selectedMonth.match(/(\d+)年(\d+)月/);
             if (match) {
                 const year = parseInt(match[1]);
                 const month = parseInt(match[2]);
                 loopStartDate = new Date(year, month - 1, 1);
-                loopEndDate = new Date(year, month, 0); // 末日
+                loopEndDate = new Date(year, month, 0);
             }
         }
         
@@ -879,7 +880,6 @@
                 curr.setDate(curr.getDate() + 1);
             }
         } else {
-            // 週別集計モード
             trendTitle.textContent = selectedMonth === 'all' ? '📊 週別売上合計推移（全期間）' : `📊 週別売上合計推移（${selectedMonth}内）`;
             let currentTrack = new Date(loopStartDate);
             const currentDay = currentTrack.getDay();
@@ -902,30 +902,49 @@
         charts.trend.data.datasets[0].label = `${labelName} (${unitMode === 'daily' ? '日別' : '週次合計'})`; charts.trend.update();
     }
 
+    // ✨ 強化改修：売上データをベースに超具体的な戦略を練り上げる詳細アドバイス生成
     function generateAutoAdvice(weekdayAverages, countryData, totalSales, topProduct) {
         const adviceArea = document.getElementById('adviceArea');
         const adviceList = document.getElementById('adviceList');
         adviceList.innerHTML = '';
 
+        // 1. 曜日別アドバイスの強化
         const weekdays = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'];
         let maxWeekdayIdx = 0; let maxWeekdayVal = 0;
         weekdayAverages.forEach((val, idx) => { if(val > maxWeekdayVal) { maxWeekdayVal = val; maxWeekdayIdx = idx; } });
         const bestDay = weekdays[maxWeekdayIdx];
-        let weekdayAdvice = `作品は <span class="advice-highlight">${bestDay}</span> に平均売上が高くなる傾向があります。新作のリリース通知や販促活動は、<span class="advice-highlight">${bestDay === '日曜日' || bestDay === '土曜日' ? '週末' : bestDay}</span> に合わせるとより効果的です。`;
+        
+        let weekdayDetail = '';
+        let weekdayAction = '';
+        if (bestDay === '土曜日' || bestDay === '日曜日') {
+            weekdayDetail = `週末（<span class="advice-highlight">${bestDay}</span>）に売上が集中する傾向があります。これは購入ユーザーが休日のリラックスタイムや、友人とLINEで盛んにチャットを楽しむタイミングで「新しい表現方法（スタンプ・絵文字）」を探して衝動買いしている可能性を示唆します。`;
+            weekdayAction = `【提案】新作のリリース承認や、SNSでの告知・お披露目は「金曜日の夜 19時〜21時」または「土日のお昼 11時〜13時」に照準を合わせると、露出効果が最大化します。`;
+        } else if (bestDay === '月曜日' || bestDay === '金曜日') {
+            weekdayDetail = `週の節目である <span class="advice-highlight">${bestDay}</span> に平均売上が伸びています。仕事や学校が始まるタイミングの「挨拶需要」、あるいは週末を前にした解放感からくる「お疲れ様スタンプ」の利用頻度が高まる波を捉えています。`;
+            weekdayAction = `【提案】「おはよう・いってきます」などの日常挨拶系や、「お疲れ様・今週も頑張ろう」といった労い（ねぎらい）メッセージが主体のシリーズをこの曜日の前夜にアピールすると購入率が跳ね上がります。`;
+        } else {
+            weekdayDetail = `週中盤の平日である <span class="advice-highlight">${bestDay}</span> にピークが来ています。特定のコアファンが習慣的にチェックしているか、日常のヘビーユーザーが実用性の高いスタンプをアクティブに消費している証拠です。`;
+            weekdayAction = `【提案】奇をてらったテーマよりも、毎日のトークで確実に消費される「YES/NO/了解/ありがとう」などの超実用的なリアクション系・敬語系を平日の夕方（17時〜19時）にプッシュするのが定石です。`;
+        }
 
+        // 2. 海外比率アドバイスの強化
         let japanSales = countryData['日本'] || 0;
         let totalCountrySales = 0;
         Object.values(countryData).forEach(v => totalCountrySales += v);
         let overseasSales = totalCountrySales - japanSales;
         let overseasRatio = totalCountrySales > 0 ? Math.round((overseasSales / totalCountrySales) * 100) : 0;
         
-        let overseasAdvice = '';
-        if (overseasRatio > 10) {
-            overseasAdvice = `現在、全体の <span class="advice-highlight">${overseasRatio}%</span> が海外からの売上です！言葉の壁がない絵文字や大きめな表現を意識するとさらに伸びる可能性があります。`;
+        let overseasDetail = '';
+        let overseasAction = '';
+        if (overseasRatio > 15) {
+            overseasDetail = `現在、全体の <span class="advice-highlight">${overseasRatio}%</span> が海外での売上となっており、グローバル市場への適応がすでに始まっています！言葉が通じなくても、キャラクターのコミカルな動きや愛らしい表情、あるいはニュアンスだけで意図が伝わるデザインが国境を越えて愛されています。`;
+            overseasAction = `【海外拡販戦略】次回作では「文字（日本語）」を一切排除した【100%イラストのみの表情・リアクション特化版】を検討してください。また、台湾やタイなどの主要LINE普及国を意識し、少しオーバーな感情表現（大泣き、大笑い、ズッコケなど）を盛り込むと、さらに海外比率とファン層が拡大します。`;
         } else {
-            overseasAdvice = `現在は国内売上が中心です。海外を視野に入れる場合、文字を含まない「イラスト単体で感情が伝わるリアクション系」を展開すると、言葉の壁を超えて世界で見つけてもらいやすくなります。`;
+            overseasDetail = `売上の大半が日本国内で発生しています。国内の日本語表現（「丁寧な敬語」「流行りのゆるいフレーズ」など）が現在のターゲット層（日本のLINEユーザー）に深く刺さっている大成功の証拠です。`;
+            overseasAction = `【国内深掘り戦略】無理に海外を狙う必要はありません。国内でのシェアを高めるため、「学校・職場・ママ友」など、さらに日本の日常生活の狭いシーンに特化した【シチュエーション限定スタンプ・絵文字】を横展開するのが最短ルートです。`;
         }
 
+        // 3. リリース効率・ストック資産アドバイスの強化
         let recentReleaseSales = 0;
         let activeProductsCount = 0;
         let totalRankedSales = 0;
@@ -936,139 +955,61 @@
             const info = globalShopData[title];
             if (info && info.releaseDate) {
                 const daysOld = (new Date() - info.releaseDate) / (1000 * 60 * 60 * 24);
-                if (daysOld <= 45) {
-                    recentReleaseSales += p.sales;
-                }
+                if (daysOld <= 45) { recentReleaseSales += p.sales; }
             }
             if (p.sales > 0) activeProductsCount++;
         });
 
-        let releaseAdvice = '';
+        let releaseDetail = '';
+        let releaseAction = '';
         if (totalRankedSales > 0) {
             const recentRatio = Math.round((recentReleaseSales / totalRankedSales) * 100);
             if (recentRatio > 35) {
-                releaseAdvice = `直近リリースの新作が全体の売上の <span class="advice-highlight">${recentRatio}%</span> を叩き出しており、<span class="advice-highlight">新作ブースト状態</span>が非常に好調です！この波があるうちに次の関連バリエーションを仕込むのが必勝パターンです。`;
-            } else if (recentRatio > 0) {
-                releaseAdvice = `現在の売上の大半は、リリースから時間が経った過去作が維持しています（ロングセラー化）。土台が安定しているので、新作を出すたびに売上がまるごと上乗せされる最高の状態です。`;
+                releaseDetail = `直近45日以内にリリースした新作群が、ショップ全体の売上比率の <span class="advice-highlight">${recentRatio}%</span> を牽引する【新着ブースト型】のショップ構造です。新キャラクターや最新の流行を取り入れたデザインが、今まさにユーザーのトレンドを捉えています！`;
+                releaseAction = `【新作最大化アクション】新着露出期間（リリース直後）が最も稼げるボーナスタイムです。この売れている勢いがあるうちに、同じキャラクターで「さらに使いやすい基本挨拶セット」や「毎日使える絵文字バージョン」など、間髪入れずに【スピンオフ・第2弾】を即座に投下して波を維持しましょう。`;
             } else {
-                releaseAdvice = `全アイテム数 ${activeProductsCount} 個のショップ運営です。販売開始日のデータが同期されました。新作をリリースした直後はLINE側の新着露出が増えるため、定期的な新作投入が全体の底上げに繋がります。`;
+                releaseDetail = `売上の大部分を、過去にリリースした「ストック（過去作資産）」が長期的に維持している【安定ストック型】の非常に健全なショップです。流行り廃りに左右されず、ユーザーの「お気に入り」として定着し、日々安定して検索・購入され続けています。`;
+                releaseAction = `【ストック積み上げアクション】土台となる固定給のような売上が完成しているため、リスクを取ったチャレンジが可能です。既存の人気キャラの「別表情パターン」を増やすか、あるいは全く新しいジャンル・絵柄（例: 脱力系、キモカワ系、ミニマルな線画など）に挑戦して、新しいストックの柱をもう一本作りに行くのが最適です。`;
             }
         }
 
-        if (bestDay) adviceList.innerHTML += `<li><strong>📅 曜日別の傾向：</strong> ${weekdayAdvice}</li>`;
-        adviceList.innerHTML += `<li><strong>🌏 海外比率：</strong> ${overseasAdvice}</li>`;
-        if (releaseAdvice) adviceList.innerHTML += `<li><strong>📈 リリース効率：</strong> ${releaseAdvice}</li>`;
+        // HTMLとして流し込み（リスト形式・ネクストアクション付き）
+        adviceList.innerHTML += `
+            <li>
+                <div class="advice-section-title">📅 曜日別の売上分析と最適なアプローチ</div>
+                <div>${weekdayDetail}</div>
+                <div class="advice-nextaction">${weekdayAction}</div>
+            </li>
+        `;
+        adviceList.innerHTML += `
+            <li>
+                <div class="advice-section-title">🌏 市場浸透度（国内 vs 海外）から見るデザイン戦略</div>
+                <div>${overseasDetail}</div>
+                <div class="advice-nextaction">${overseasAction}</div>
+            </li>
+        `;
+        if (releaseDetail) {
+            adviceList.innerHTML += `
+                <li>
+                    <div class="advice-section-title">📈 リリースシナジーとショップ資産の最大化</div>
+                    <div>${releaseDetail}</div>
+                    <div class="advice-nextaction">${releaseAction}</div>
+                </li>
+            `;
+        }
+
+        // 4. 総数に応じたワンポイントアドバイス
+        if (activeProductsCount >= 5 && topProduct !== '-') {
+            adviceList.innerHTML += `
+                <li>
+                    <div class="advice-section-title">🏆 現在の稼ぎ頭「${topProduct}」のレバレッジ（テコ入れ）</div>
+                    <div>ショップのエースである「${topProduct}」はお気に入り登録数やリピート率も高い傾向にあります。このキャラクターはユーザーにとって『認知度が高く、信頼できるブランド』になっています。</div>
+                    <div class="advice-nextaction">【横展開案】このエースキャラクターを主役に据えた、別カテゴリ（スタンプが売れていれば絵文字、絵文字が売れていれば着せかえ、または動くアニメーションスタンプ）への完全移植を行うことで、既存ファンがそのまま別カテゴリの商品もセットで購入してくれるため、最も低いコストで高確率なヒットを狙えます。</div>
+                </li>
+            `;
+        }
 
         adviceArea.style.display = 'block';
-    }
-
-    function updateRankingChart() {
-        const mode = monthFilter.value;
-        const sortType = sortFilter.value;
-        const displayMode = displayModeFilter.value;
-        
-        let allTitlesSet = new Set();
-        let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
-        Object.keys(targetData).forEach(t => allTitlesSet.add(t));
-        Object.keys(globalFavoriteData).forEach(t => allTitlesSet.add(t));
-        Object.keys(globalShopData).forEach(t => allTitlesSet.add(t));
-
-        let totalMonthSales = 0; let totalMonthQty = 0;
-        Object.keys(targetData).forEach(k => { totalMonthSales += targetData[k].sales; totalMonthQty += targetData[k].qty; });
-
-        const monthTotalLabel = document.getElementById('selectedMonthTotal');
-        if (mode === 'all') { monthTotalLabel.textContent = ''; monthTotalLabel.className = ''; } 
-        else { monthTotalLabel.textContent = `¥${totalMonthSales.toLocaleString()} (${totalMonthQty.toLocaleString()}個)`; monthTotalLabel.className = 'selected-month-total'; }
-
-        let items = Array.from(allTitlesSet).map(k => {
-            const d = targetData[k] || { sales: 0, qty: 0, japanSales: 0, overseasSales: 0, japanQty: 0, overseasQty: 0, firstDate: new Date(0), lastDate: new Date(0) };
-            const favObj = globalFavoriteData[k] || { count: 0, prevCount: 0, diff: 0 };
-            const shop = globalShopData[k] || { imgUrl: null, releaseDate: null };
-            return {
-                title: k, sales: d.sales, qty: d.qty,
-                japanSales: d.japanSales, overseasSales: d.overseasSales,
-                japanQty: d.japanQty, overseasQty: d.overseasQty,
-                firstDate: d.firstDate, lastDate: d.lastDate,
-                favorites: favObj.count, favDiff: favObj.diff,
-                imgUrl: shop.imgUrl,
-                releaseDate: shop.releaseDate
-            };
-        }).filter(item => item.sales > 0 || item.favorites > 0 || item.releaseDate);
-
-        if (sortType === 'salesDesc') items.sort((a, b) => b.sales - a.sales);
-        else if (sortType === 'favoriteDesc') items.sort((a, b) => b.favorites - a.favorites);
-        else if (sortType === 'qtyDesc') items.sort((a, b) => b.qty - a.qty);
-        else if (sortType === 'dateDesc') items.sort((a, b) => b.lastDate - a.lastDate);
-        else if (sortType === 'releaseDesc') {
-            items.sort((a, b) => {
-                if(!a.releaseDate) return 1; if(!b.releaseDate) return -1;
-                return b.releaseDate - a.releaseDate;
-            });
-        }
-
-        const isMobile = window.innerWidth < 768;
-        const displayCount = 15; const sorted = items.slice(0, displayCount);
-
-        const canvas = document.getElementById('rankingChart');
-        const listContainer = document.getElementById('rankingList');
-
-        if (charts.ranking) { charts.ranking.destroy(); charts.ranking = null; canvas.removeAttribute('width'); canvas.removeAttribute('height'); canvas.style.width = ''; canvas.style.height = ''; }
-
-        if (displayMode === 'chart') {
-            canvas.style.display = 'block'; listContainer.style.display = 'none';
-            const labels = sorted.map(p => { 
-                const diffText = p.favDiff > 0 ? `(+${p.favDiff})` : '';
-                const priceLabel = `[¥${p.sales.toLocaleString()} / ★${p.favorites}${diffText}]`; 
-                return isMobile ? [p.title.length > 10 ? p.title.slice(0, 10) + '...' : p.title, priceLabel] : [p.title, priceLabel]; 
-            });
-
-            let dataJapan, dataOverseas, labelJapan, labelOverseas;
-            if (sortType === 'qtyDesc') { dataJapan = sorted.map(p => p.japanQty); dataOverseas = sorted.map(p => p.overseasQty); labelJapan = '日本（個）'; labelOverseas = '海外（個）'; } 
-            else { dataJapan = sorted.map(p => p.japanSales); dataOverseas = sorted.map(p => p.overseasSales); labelJapan = '日本（売上）'; labelOverseas = '海外（売上）'; }
-
-            charts.ranking = new Chart(canvas.getContext('2d'), {
-                type: 'bar',
-                data: { labels: labels, datasets: [{ label: labelJapan, data: dataJapan, backgroundColor: '#06C755' }, { label: labelOverseas, data: dataOverseas, backgroundColor: '#e67e22' }] },
-                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' }, tooltip: { callbacks: { title: (context) => sorted[context[0].dataIndex].title } } }, scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true, ticks: { autoSkip: false, font: { size: isMobile ? 9 : 11, weight: 'bold' }, color: '#2c3e50' } } } }
-            });
-        } else {
-            canvas.style.display = 'none'; listContainer.style.display = 'flex'; listContainer.innerHTML = '';
-            const maxVal = Math.max(...sorted.map(p => sortType === 'qtyDesc' ? p.qty : p.sales), 1);
-
-            sorted.forEach((p, index) => {
-                const imgUrl = p.imgUrl;
-                const valJapan = sortType === 'qtyDesc' ? p.japanQty : p.japanSales;
-                const pctJapan = (valJapan / maxVal) * 100;
-                const valOverseas = sortType === 'qtyDesc' ? p.overseasQty : p.overseasSales;
-                const pctOverseas = (valOverseas / maxVal) * 100;
-                
-                const itemEl = document.createElement('div'); itemEl.className = `ranking-item ${!imgUrl ? 'no-image' : ''}`;
-                let metaText = `¥${p.sales.toLocaleString()} (${p.qty}個)`;
-                if (p.overseasSales > 0) metaText = `計¥${p.sales.toLocaleString()} [日:¥${p.japanSales.toLocaleString()} / 外:¥${p.overseasSales.toLocaleString()}]`;
-
-                const releaseLabel = p.releaseDate ? `⏱️ 販売開始: ${p.releaseDate.getFullYear()}/${p.releaseDate.getMonth()+1}/${p.releaseDate.getDate()}` : '⏱️ 販売開始: 不明';
-
-                let favBadgeHtml = ``;
-                if (p.favDiff > 0) {
-                    favBadgeHtml = `<div class="rank-favorite-badge increased">⭐️ ${p.favorites} <span class="fav-diff">(+${p.favDiff})</span></div>`;
-                } else {
-                    favBadgeHtml = `<div class="rank-favorite-badge">⭐️ ${p.favorites}</div>`;
-                }
-
-                itemEl.innerHTML = `
-                    <div class="rank-badge ${index < 3 ? 'top3' : ''}">${index + 1}</div>
-                    <div class="rank-thumb-wrapper"><img class="rank-thumb" src="${imgUrl || ''}" alt="${p.title}" onerror="this.parentElement.parentElement.classList.add('no-image')"><span class="rank-thumb-fallback">🎨</span></div>
-                    <div class="rank-info">
-                        <div class="rank-title">${p.title}</div>
-                        <div class="rank-meta">${metaText}</div>
-                        <div class="rank-release-date">${releaseLabel}</div>
-                    </div>
-                    ${favBadgeHtml}
-                    <div class="rank-bar-container"><div class="rank-bar-japan" style="width: ${pctJapan}%"></div><div class="rank-bar-overseas" style="width: ${pctOverseas}%"></div></div>
-                `;
-                listContainer.appendChild(itemEl);
-            });
-        }
     }
 
     function generateHeatmap(startDate, endDate) {
@@ -1092,14 +1033,17 @@
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             for (let d = 1; d <= daysInMonth; d++) {
                 const dayBox = document.createElement('div'); dayBox.className = 'heatmap-day'; dayBox.textContent = d;
-                const dateKey = `${year}/${String(month + 1).padStart(2, '0')}/${String(d).padStart(2, '0')}`; const dailySales = globalDateData[dateKey] || 0;
+                const dateKey = `${year}/${String(month + 1).padStart(2, '0')}／${String(d).padStart(2, '0')}`;
+                // フォーマットゆれ吸収
+                const altDateKey = `${year}/${String(month + 1).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
+                const dailySales = globalDateData[altDateKey] || globalDateData[dateKey] || 0;
 
                 if (dailySales > 0) {
                     const ratio = dailySales / maxSales; let bgColor = '#c6e48b'; let textColor = '#24292e';
                     if (ratio > 0.75) { bgColor = '#196127'; textColor = '#fff'; }
                     else if (ratio > 0.5) { bgColor = '#239a3b'; textColor = '#fff'; }
                     else if (ratio > 0.25) { bgColor = '#7bc96f'; textColor = '#24292e'; }
-                    dayBox.style.backgroundColor = bgColor; dayBox.style.color = textColor; dayBox.title = `${dateKey}: ¥${dailySales.toLocaleString()}`;
+                    dayBox.style.backgroundColor = bgColor; dayBox.style.color = textColor; dayBox.title = `${altDateKey}: ¥${dailySales.toLocaleString()}`;
                 }
                 grid.appendChild(dayBox);
             }
@@ -1121,7 +1065,6 @@
     function renderAllCharts(dateLabels, dateValues, weekdayAverages, categoryData, countryData) {
         Object.keys(charts).forEach(key => { if (charts[key] && key !== 'ranking') { charts[key].destroy(); charts[key] = null; } });
 
-        // メイン売上推移
         charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
             type: 'bar', 
             data: { labels: dateLabels, datasets: [{ label: '売上高', data: dateValues, backgroundColor: '#06C755', borderRadius: 2 }] },
@@ -1297,7 +1240,6 @@
             }
         });
 
-        // ✨ アップデート機能：月別純増売上高の推移を「折れ線 (line)」から「棒グラフ (bar)」に変更
         charts.pureMonth = new Chart(document.getElementById('pureMonthChart').getContext('2d'), {
             type: 'bar',
             data: {
@@ -1334,6 +1276,115 @@
                 scales: { x: { stacked: true }, y: { stacked: true, max: 100, ticks: { callback: (v) => `${v}%` } } }
             }
         });
+    }
+
+    function updateRankingChart() {
+        const mode = monthFilter.value;
+        const sortType = sortFilter.value;
+        const displayMode = displayModeFilter.value;
+        
+        let allTitlesSet = new Set();
+        let targetData = mode === 'all' ? globalProductTotals : (monthlyProductTotals[mode] || {});
+        Object.keys(targetData).forEach(t => allTitlesSet.add(t));
+        Object.keys(globalFavoriteData).forEach(t => allTitlesSet.add(t));
+        Object.keys(globalShopData).forEach(t => allTitlesSet.add(t));
+
+        let totalMonthSales = 0; let totalMonthQty = 0;
+        Object.keys(targetData).forEach(k => { totalMonthSales += targetData[k].sales; totalMonthQty += targetData[k].qty; });
+
+        const monthTotalLabel = document.getElementById('selectedMonthTotal');
+        if (mode === 'all') { monthTotalLabel.textContent = ''; monthTotalLabel.className = ''; } 
+        else { monthTotalLabel.textContent = `¥${totalMonthSales.toLocaleString()} (${totalMonthQty.toLocaleString()}個)`; monthTotalLabel.className = 'selected-month-total'; }
+
+        let items = Array.from(allTitlesSet).map(k => {
+            const d = targetData[k] || { sales: 0, qty: 0, japanSales: 0, overseasSales: 0, japanQty: 0, overseasQty: 0, firstDate: new Date(0), lastDate: new Date(0) };
+            const favObj = globalFavoriteData[k] || { count: 0, prevCount: 0, diff: 0 };
+            const shop = globalShopData[k] || { imgUrl: null, releaseDate: null };
+            return {
+                title: k, sales: d.sales, qty: d.qty,
+                japanSales: d.japanSales, overseasSales: d.overseasSales,
+                japanQty: d.japanQty, overseasQty: d.overseasQty,
+                firstDate: d.firstDate, lastDate: d.lastDate,
+                favorites: favObj.count, favDiff: favObj.diff,
+                imgUrl: shop.imgUrl,
+                releaseDate: shop.releaseDate
+            };
+        }).filter(item => item.sales > 0 || item.favorites > 0 || item.releaseDate);
+
+        if (sortType === 'salesDesc') items.sort((a, b) => b.sales - a.sales);
+        else if (sortType === 'favoriteDesc') items.sort((a, b) => b.favorites - a.favorites);
+        else if (sortType === 'qtyDesc') items.sort((a, b) => b.qty - a.qty);
+        else if (sortType === 'dateDesc') items.sort((a, b) => b.lastDate - a.lastDate);
+        else if (sortType === 'releaseDesc') {
+            items.sort((a, b) => {
+                if(!a.releaseDate) return 1; if(!b.releaseDate) return -1;
+                return b.releaseDate - a.releaseDate;
+            });
+        }
+
+        const isMobile = window.innerWidth < 768;
+        const displayCount = 15; const sorted = items.slice(0, displayCount);
+
+        const canvas = document.getElementById('rankingChart');
+        const listContainer = document.getElementById('rankingList');
+
+        if (charts.ranking) { charts.ranking.destroy(); charts.ranking = null; canvas.removeAttribute('width'); canvas.removeAttribute('height'); canvas.style.width = ''; canvas.style.height = ''; }
+
+        if (displayMode === 'chart') {
+            canvas.style.display = 'block'; listContainer.style.display = 'none';
+            const labels = sorted.map(p => { 
+                const diffText = p.favDiff > 0 ? `(+${p.favDiff})` : '';
+                const priceLabel = `[¥${p.sales.toLocaleString()} / ★${p.favorites}${diffText}]`; 
+                return isMobile ? [p.title.length > 10 ? p.title.slice(0, 10) + '...' : p.title, priceLabel] : [p.title, priceLabel]; 
+            });
+
+            let dataJapan, dataOverseas, labelJapan, labelOverseas;
+            if (sortType === 'qtyDesc') { dataJapan = sorted.map(p => p.japanQty); dataOverseas = sorted.map(p => p.overseasQty); labelJapan = '日本（個）'; labelOverseas = '海外（個）'; } 
+            else { dataJapan = sorted.map(p => p.japanSales); dataOverseas = sorted.map(p => p.overseasSales); labelJapan = '日本（売上）'; labelOverseas = '海外（売上）'; }
+
+            charts.ranking = new Chart(canvas.getContext('2d'), {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ label: labelJapan, data: dataJapan, backgroundColor: '#06C755' }, { label: labelOverseas, data: dataOverseas, backgroundColor: '#e67e22' }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' }, tooltip: { callbacks: { title: (context) => sorted[context[0].dataIndex].title } } }, scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true, ticks: { autoSkip: false, font: { size: isMobile ? 9 : 11, weight: 'bold' }, color: '#2c3e50' } } } }
+            });
+        } else {
+            canvas.style.display = 'none'; listContainer.style.display = 'flex'; listContainer.innerHTML = '';
+            const maxVal = Math.max(...sorted.map(p => sortType === 'qtyDesc' ? p.qty : p.sales), 1);
+
+            sorted.forEach((p, index) => {
+                const imgUrl = p.imgUrl;
+                const valJapan = sortType === 'qtyDesc' ? p.japanQty : p.japanSales;
+                const pctJapan = (valJapan / maxVal) * 100;
+                const valOverseas = sortType === 'qtyDesc' ? p.overseasQty : p.overseasSales;
+                const pctOverseas = (valOverseas / maxVal) * 100;
+                
+                const itemEl = document.createElement('div'); itemEl.className = `ranking-item ${!imgUrl ? 'no-image' : ''}`;
+                let metaText = `¥${p.sales.toLocaleString()} (${p.qty}個)`;
+                if (p.overseasSales > 0) metaText = `計¥${p.sales.toLocaleString()} [日:¥${p.japanSales.toLocaleString()} / 外:¥${p.overseasSales.toLocaleString()}]`;
+
+                const releaseLabel = p.releaseDate ? `⏱️ 販売開始: ${p.releaseDate.getFullYear()}/${p.releaseDate.getMonth()+1}/${p.releaseDate.getDate()}` : '⏱️ 販売開始: 不明';
+
+                let favBadgeHtml = ``;
+                if (p.favDiff > 0) {
+                    favBadgeHtml = `<div class="rank-favorite-badge increased">⭐️ ${p.favorites} <span class="fav-diff">(+${p.favDiff})</span></div>`;
+                } else {
+                    favBadgeHtml = `<div class="rank-favorite-badge">⭐️ ${p.favorites}</div>`;
+                }
+
+                itemEl.innerHTML = `
+                    <div class="rank-badge ${index < 3 ? 'top3' : ''}">${index + 1}</div>
+                    <div class="rank-thumb-wrapper"><img class="rank-thumb" src="${imgUrl || ''}" alt="${p.title}" onerror="this.parentElement.parentElement.classList.add('no-image')"><span class="rank-thumb-fallback">🎨</span></div>
+                    <div class="rank-info">
+                        <div class="rank-title">${p.title}</div>
+                        <div class="rank-meta">${metaText}</div>
+                        <div class="rank-release-date">${releaseLabel}</div>
+                    </div>
+                    ${favBadgeHtml}
+                    <div class="rank-bar-container"><div class="rank-bar-japan" style="width: ${pctJapan}%"></div><div class="rank-bar-overseas" style="width: ${pctOverseas}%"></div></div>
+                `;
+                listContainer.appendChild(itemEl);
+            });
+        }
     }
 
     function saveSingleElement(elementId, fileNameLabel) {
