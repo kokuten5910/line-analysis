@@ -6,9 +6,7 @@
     <title>LINE売上・お気に入り分析ダッシュボード</title>
     <link rel="icon" href="favicon.png" type="image/png">
     
-    <!-- Chart.js 本体 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- 日付軸を表示するために必要なアダプターライブラリ -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -158,7 +156,7 @@
     
     <div class="file-input-area" id="dropArea" onclick="document.getElementById('csvFile').click()">
         <p style="margin: 0; font-size: 13px; font-weight: bold; color: #06C755;">売上CSV・ショップ(日付)CSV・お気に入り履歴CSVをドロップ</p>
-        <span style="font-size: 10px; color: #7f8c8d;">※ファイルをまとめて一度に入れても、順遅同で正しく解析・結合されます</span>
+        <span style="font-size: 10px; color: #7f8c8d;">※ファイルをまとめて一度に入れても、順不同で正しく解析・結合されます</span>
         <input type="file" id="csvFile" accept=".csv" multiple>
     </div>
 
@@ -179,7 +177,6 @@
 
         <div class="dashboard-grid" id="dashboardArea">
             
-            <!-- ① アイテムランキング（最上位に配置） -->
             <div class="chart-container full-width ranking-container" id="card-ranking">
                 <h3>
                     <span>👑 アイテムランキング <span id="selectedMonthTotal"></span></span>
@@ -205,7 +202,6 @@
                 <div id="rankingList" class="ranking-list-container"></div>
             </div>
 
-            <!-- ② 月別のリリース数内訳と売れた種類数の統計テーブル（ランキングの下に配置） -->
             <div class="chart-container full-width" id="card-monthly-stats-table">
                 <h3>
                     <span>🗓️ 月別ショップ活動統計（スタンプ・絵文字内訳 ＆ リリース累計）</span>
@@ -235,7 +231,6 @@
                 </div>
             </div>
 
-            <!-- ③ 1日に売れた種類数の詳細推移（ランキングおよび月別統計の下に配置） -->
             <div class="chart-container full-width" id="card-daily-types-log">
                 <h3>
                     <span>🔍 日別：1日に売れた種類数の詳細推移表</span>
@@ -262,7 +257,6 @@
                 </div>
             </div>
 
-            <!-- 🎈 分析②: リリース時期 × 累計売上のバブルチャート -->
             <div class="chart-container full-width" id="card-bubble">
                 <h3>
                     <span>🎈 リリース時期 × 累計売上のバブルチャート（円の大きさ＝お気に入り需要）</span>
@@ -271,7 +265,6 @@
                 <canvas id="bubbleChart"></canvas>
             </div>
 
-            <!-- 📈 分析①: 経過日数別 累積売上カーブ -->
             <div class="chart-container full-width" id="card-lifecycle">
                 <h3>
                     <span>📈 経過日数別の累積売上カーブ（作品寿命と成長速度の比較）</span>
@@ -315,6 +308,9 @@
                             <option value="daily" selected>📅 日別表示</option>
                             <option value="weekly">🗓️ 週別表示（合計）</option>
                         </select>
+                        <select id="trendMonthFilter" class="month-select">
+                            <option value="all">全期間表示</option>
+                        </select>
                         <select id="trendProductFilter" class="month-select" style="max-width: 140px;">
                             <option value="all">すべてのアイテム（全体）</option>
                         </select>
@@ -324,7 +320,6 @@
                 <canvas id="trendChart"></canvas>
             </div>
 
-            <!-- 💸 純粋な月別売上推移（金額ベース比較） -->
             <div class="chart-container" id="card-pure-month">
                 <h3>
                     <span>💸 月別売上高の推移（純金純増ベース）</span>
@@ -333,7 +328,6 @@
                 <canvas id="pureMonthChart"></canvas>
             </div>
 
-            <!-- 🔄 新作 vs 過去作の「月別売上構成比」推移 -->
             <div class="chart-container" id="card-month">
                 <h3>
                     <span>🗓️ 月別売上構成比（新作比率 vs 過去作ストック比率）</span>
@@ -374,6 +368,7 @@
     const heatmapMonthFilter = document.getElementById('heatmapMonthFilter');
     const trendProductFilter = document.getElementById('trendProductFilter');
     const trendUnitFilter = document.getElementById('trendUnitFilter');
+    const trendMonthFilter = document.getElementById('trendMonthFilter');
     const trendTitle = document.getElementById('trendTitle');
     const logMonthFilter = document.getElementById('logMonthFilter');
     
@@ -436,6 +431,7 @@
     heatmapMonthFilter.addEventListener('change', () => { updateHeatmapVisibility(heatmapMonthFilter.value); });
     trendProductFilter.addEventListener('change', () => { updateTrendChartOnly(); }); 
     trendUnitFilter.addEventListener('change', () => { updateTrendChartOnly(); });
+    trendMonthFilter.addEventListener('change', () => { updateTrendChartOnly(); });
     logMonthFilter.addEventListener('change', () => { rebuildDailyLogTable(); });
 
     function handleMultipleFiles(files) {
@@ -500,7 +496,6 @@
         if (imgIdx === -1) imgIdx = header.indexOf('画像URL');
         const releaseIdx = header.indexOf('販売開始日');
         
-        // カテゴリ（スタンプか絵文字かを分類するため）
         let categoryIdx = header.indexOf('カテゴリ');
         if (categoryIdx === -1) categoryIdx = header.indexOf('タイプ');
 
@@ -701,6 +696,7 @@
 
         const allMonthsSorted = Object.keys(monthlyProductTotals).sort();
 
+        // 各種ドロップダウンの更新
         const currentSelection = monthFilter.value;
         monthFilter.innerHTML = '<option value="all">総合（全期間）</option>';
         allMonthsSorted.forEach(m => {
@@ -714,6 +710,14 @@
             const opt = document.createElement('option'); opt.value = m; opt.textContent = m; logMonthFilter.appendChild(opt);
         });
         if ([...logMonthFilter.options].some(o => o.value === currentLogSel)) { logMonthFilter.value = currentLogSel; }
+
+        // ✨ 追加機能: 売上推移用の月別選択フィルタの同期
+        const currentTrendMonthSel = trendMonthFilter.value;
+        trendMonthFilter.innerHTML = '<option value="all">全期間表示</option>';
+        allMonthsSorted.forEach(m => {
+            const opt = document.createElement('option'); opt.value = m; opt.textContent = m; trendMonthFilter.appendChild(opt);
+        });
+        if ([...trendMonthFilter.options].some(o => o.value === currentTrendMonthSel)) { trendMonthFilter.value = currentTrendMonthSel; }
 
         const currentProductSel = trendProductFilter.value;
         trendProductFilter.innerHTML = '<option value="all">すべてのアイテム（全体）</option>';
@@ -738,12 +742,11 @@
         rebuildDailyLogTable();
     }
 
-    // ✨ アップデート機能：月別活動テーブル（スタンプ・絵文字内訳＆累計数）の構築
     function buildMonthlyStatsTable(allMonths) {
         const tbody = document.getElementById('monthlyStatsTableBody');
         tbody.innerHTML = '';
 
-        let runningTotalRelease = 0; // 累計リリース数のカウンター
+        let runningTotalRelease = 0;
 
         allMonths.forEach(mKey => {
             const match = mKey.match(/(\d+)年(\d+)月/);
@@ -755,7 +758,6 @@
             let emojiCount = 0;
             let otherCount = 0;
 
-            // 1. その月の新規リリース作品数をカテゴリ別に精査
             Object.keys(globalShopData).forEach(title => {
                 const item = globalShopData[title];
                 const rDate = item.releaseDate;
@@ -772,9 +774,8 @@
             });
 
             let monthTotalRelease = stampCount + emojiCount + otherCount;
-            runningTotalRelease += monthTotalRelease; // 累計を加算
+            runningTotalRelease += monthTotalRelease;
 
-            // 2. その月の「日別売れた種類数」の平均値を計算
             let daysInMonthCount = 0;
             let totalUniqueTypesSum = 0;
             let monthUniqueTitlesSet = new Set();
@@ -842,20 +843,35 @@
         }
     }
 
+    // ✨ アップデート機能：日別売上グラフの全期間・月ごとの表示切り替えロジック
     updateTrendChartOnly = function() {
         if (!rawDates.length || !charts.trend) return;
         
         const selectedProduct = trendProductFilter.value;
         const unitMode = trendUnitFilter.value;
-        const startDate = rawDates[0]; const endDate = rawDates[rawDates.length - 1];
+        const selectedMonth = trendMonthFilter.value;
+        
+        let loopStartDate = new Date(rawDates[0]);
+        let loopEndDate = new Date(rawDates[rawDates.length - 1]);
+
+        // 特定の月が選択されている場合、描画ループの開始日・終了日をその月の1日〜末日に限定する
+        if (selectedMonth !== 'all') {
+            const match = selectedMonth.match(/(\d+)年(\d+)月/);
+            if (match) {
+                const year = parseInt(match[1]);
+                const month = parseInt(match[2]);
+                loopStartDate = new Date(year, month - 1, 1);
+                loopEndDate = new Date(year, month, 0); // 末日
+            }
+        }
         
         let finalLabels = []; let finalValues = [];
         let labelName = selectedProduct === 'all' ? '売上高' : `${selectedProduct}`;
 
         if (unitMode === 'daily') {
-            trendTitle.textContent = '📊 日別売上推移';
-            let curr = new Date(startDate);
-            while (curr <= endDate) {
+            trendTitle.textContent = selectedMonth === 'all' ? '📊 日別売上推移（全期間）' : `📊 日別売上推移（${selectedMonth}）`;
+            let curr = new Date(loopStartDate);
+            while (curr <= loopEndDate) {
                 const dStr = `${curr.getFullYear()}/${String(curr.getMonth()+1).padStart(2, '0')}/${String(curr.getDate()).padStart(2, '0')}`;
                 finalLabels.push(dStr);
                 if (selectedProduct === 'all') finalValues.push(globalDateData[dStr] || 0);
@@ -863,13 +879,14 @@
                 curr.setDate(curr.getDate() + 1);
             }
         } else {
-            trendTitle.textContent = '📊 週別売上合計推移';
-            let currentTrack = new Date(startDate);
+            // 週別集計モード
+            trendTitle.textContent = selectedMonth === 'all' ? '📊 週別売上合計推移（全期間）' : `📊 週別売上合計推移（${selectedMonth}内）`;
+            let currentTrack = new Date(loopStartDate);
             const currentDay = currentTrack.getDay();
             const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay; 
             currentTrack.setDate(currentTrack.getDate() + distanceToMonday);
 
-            while (currentTrack <= endDate) {
+            while (currentTrack <= loopEndDate) {
                 let weekSum = 0;
                 const weekLabel = `${currentTrack.getFullYear()}/${String(currentTrack.getMonth()+1).padStart(2, '0')}/${String(currentTrack.getDate()).padStart(2, '0')} の週`;
                 for (let i = 0; i < 7; i++) {
@@ -1104,6 +1121,7 @@
     function renderAllCharts(dateLabels, dateValues, weekdayAverages, categoryData, countryData) {
         Object.keys(charts).forEach(key => { if (charts[key] && key !== 'ranking') { charts[key].destroy(); charts[key] = null; } });
 
+        // メイン売上推移
         charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
             type: 'bar', 
             data: { labels: dateLabels, datasets: [{ label: '売上高', data: dateValues, backgroundColor: '#06C755', borderRadius: 2 }] },
@@ -1279,19 +1297,18 @@
             }
         });
 
+        // ✨ アップデート機能：月別純増売上高の推移を「折れ線 (line)」から「棒グラフ (bar)」に変更
         charts.pureMonth = new Chart(document.getElementById('pureMonthChart').getContext('2d'), {
-            type: 'line',
+            type: 'bar',
             data: {
                 labels: allMonths,
                 datasets: [{
                     label: '月間総売上（円）',
                     data: pureMonthSales,
-                    backgroundColor: 'rgba(52, 152, 219, 0.2)',
+                    backgroundColor: 'rgba(52, 152, 219, 0.75)',
                     borderColor: '#3498db',
-                    borderWidth: 3,
-                    pointBackgroundColor: '#3498db',
-                    fill: true,
-                    tension: 0.1
+                    borderWidth: 1,
+                    borderRadius: 4
                 }]
             },
             options: {
