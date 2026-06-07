@@ -205,6 +205,33 @@
                 <canvas id="rankingChart"></canvas>
                 <div id="rankingList" class="ranking-list-container"></div>
             </div>
+<div class="chart-container full-width" id="card-projection" style="margin-top: 15px;">
+    <h3>
+        <span>🔮 月途中の同日比較 ＆ 今月の着地予測（今日：<span id="projCurrentDay">--</span>日目）</span>
+        <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-projection', '月途中比較と着地予測')">📸 保存</button>
+    </h3>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 15px;">
+        <div style="background: #e8f8f5; border: 1px solid #27ae60; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 11px; color: #27ae60; font-weight: bold;">📊 今月の現在までの売上</div>
+            <div id="projCurrentSales" style="font-size: 20px; font-weight: bold; color: #2c3e50;">¥0</div>
+        </div>
+        <div style="background: #fdf2e9; border: 1px solid #e67e22; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 11px; color: #e67e22; font-weight: bold;">🎯 予測着地（過去の売上ペース基準）</div>
+            <div id="projPaceForecast" style="font-size: 20px; font-weight: bold; color: #d35400;">¥0</div>
+            <div style="font-size: 9px; color: #7f8c8d; margin-top: 2px;">過去の月内進捗トレンドから逆算</div>
+        </div>
+        <div style="background: #ebf5fb; border: 1px solid #2980b9; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 11px; color: #2980b9; font-weight: bold;">🧮 予測着地（日割り単純計算）</div>
+            <div id="projLinearForecast" style="font-size: 20px; font-weight: bold; color: #2c3e50;">¥0</div>
+            <div style="font-size: 9px; color: #7f8c8d; margin-top: 2px;">1日あたりの平均売上 × 月末日数</div>
+        </div>
+    </div>
+
+    <div style="height: 240px; position: relative;">
+        <canvas id="projectionChart"></canvas>
+    </div>
+</div>
 
             <div class="chart-container full-width" id="card-monthly-stats-table">
                 <h3>
@@ -361,7 +388,6 @@
 
     </div>
 </div>
-
 <script>
     const fileInput = document.getElementById('csvFile');
     const dropArea = document.getElementById('dropArea');
@@ -376,7 +402,8 @@
     const trendTitle = document.getElementById('trendTitle');
     const logMonthFilter = document.getElementById('logMonthFilter');
     
-    let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null, lifecycle: null, bubble: null, pureMonth: null };
+    // ✨ chartsオブジェクトに projection を追加しました
+    let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null, lifecycle: null, bubble: null, pureMonth: null, projection: null };
     
     let globalShopData = {}; 
     let globalFavoriteData = {};
@@ -664,6 +691,7 @@
         }
     }
 
+    // 📌 全体データを画面に反映させる中心の関数
     function refreshDashboard() {
         if (Object.keys(globalProductTotals).length === 0) {
             updateRankingChart();
@@ -743,6 +771,9 @@
         
         buildMonthlyStatsTable(allMonthsSorted);
         rebuildDailyLogTable();
+
+        // ✨ 追記：売上データをすべて配置し終えた最後に、着地予測の計算を実行させます
+        calculateMonthlyProjections();
     }
 
     function buildMonthlyStatsTable(allMonths) {
@@ -846,7 +877,7 @@
         }
     }
 
-    updateTrendChartOnly = function() {
+    function updateTrendChartOnly() {
         if (!rawDates.length || !charts.trend) return;
         
         const selectedProduct = trendProductFilter.value;
@@ -888,7 +919,7 @@
 
             while (currentTrack <= loopEndDate) {
                 let weekSum = 0;
-                const weekLabel = `${currentTrack.getFullYear()}/${String(currentTrack.getMonth()+1).padStart(2, '0')}/${String(currentTrack.getDate()).padStart(2, '0')} の週`;
+                const weekLabel = `${currentTrack.getFullYear()}/${String(currentTrack.getMonth()+1).padStart(2, '0')}／${String(currentTrack.getDate()).padStart(2, '0')} の週`;
                 for (let i = 0; i < 7; i++) {
                     const dStr = `${currentTrack.getFullYear()}/${String(currentTrack.getMonth()+1).padStart(2, '0')}/${String(currentTrack.getDate()).padStart(2, '0')}`;
                     if (selectedProduct === 'all') weekSum += (globalDateData[dStr] || 0);
@@ -902,13 +933,11 @@
         charts.trend.data.datasets[0].label = `${labelName} (${unitMode === 'daily' ? '日別' : '週次合計'})`; charts.trend.update();
     }
 
-    // ✨ 強化改修：売上データをベースに超具体的な戦略を練り上げる詳細アドバイス生成
     function generateAutoAdvice(weekdayAverages, countryData, totalSales, topProduct) {
         const adviceArea = document.getElementById('adviceArea');
         const adviceList = document.getElementById('adviceList');
         adviceList.innerHTML = '';
 
-        // 1. 曜日別アドバイスの強化
         const weekdays = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'];
         let maxWeekdayIdx = 0; let maxWeekdayVal = 0;
         weekdayAverages.forEach((val, idx) => { if(val > maxWeekdayVal) { maxWeekdayVal = val; maxWeekdayIdx = idx; } });
@@ -917,17 +946,16 @@
         let weekdayDetail = '';
         let weekdayAction = '';
         if (bestDay === '土曜日' || bestDay === '日曜日') {
-            weekdayDetail = `週末（<span class="advice-highlight">${bestDay}</span>）に売上が集中する傾向があります。これは購入ユーザーが休日のリラックスタイムや、友人とLINEで盛んにチャットを楽しむタイミングで「新しい表現方法（スタンプ・絵文字）」を探して衝動買いしている可能性を示唆します。`;
+            weekdayDetail = `週末（<span class="advice-highlight">${bestDay}</span>）に売上が集中する傾向があります。これは購入ユーザーが休日のリラックスタイムや、友人とLINEで盛んにチャットを楽しむタイミングで新しい表現方法を探して衝動買いしている可能性を示唆します。`;
             weekdayAction = `【提案】新作のリリース承認や、SNSでの告知・お披露目は「金曜日の夜 19時〜21時」または「土日のお昼 11時〜13時」に照準を合わせると、露出効果が最大化します。`;
         } else if (bestDay === '月曜日' || bestDay === '金曜日') {
             weekdayDetail = `週の節目である <span class="advice-highlight">${bestDay}</span> に平均売上が伸びています。仕事や学校が始まるタイミングの「挨拶需要」、あるいは週末を前にした解放感からくる「お疲れ様スタンプ」の利用頻度が高まる波を捉えています。`;
-            weekdayAction = `【提案】「おはよう・いってきます」などの日常挨拶系や、「お疲れ様・今週も頑張ろう」といった労い（ねぎらい）メッセージが主体のシリーズをこの曜日の前夜にアピールすると購入率が跳ね上がります。`;
+            weekdayAction = `【提案】「おはよう・いってきます」などの日常挨拶系や、「お疲れ様・今週も頑張ろう」といった労いメッセージが主体のシリーズをこの曜日の前夜にアピールすると購入率が跳ね上がります。`;
         } else {
             weekdayDetail = `週中盤の平日である <span class="advice-highlight">${bestDay}</span> にピークが来ています。特定のコアファンが習慣的にチェックしているか、日常のヘビーユーザーが実用性の高いスタンプをアクティブに消費している証拠です。`;
             weekdayAction = `【提案】奇をてらったテーマよりも、毎日のトークで確実に消費される「YES/NO/了解/ありがとう」などの超実用的なリアクション系・敬語系を平日の夕方（17時〜19時）にプッシュするのが定石です。`;
         }
 
-        // 2. 海外比率アドバイスの強化
         let japanSales = countryData['日本'] || 0;
         let totalCountrySales = 0;
         Object.values(countryData).forEach(v => totalCountrySales += v);
@@ -938,13 +966,12 @@
         let overseasAction = '';
         if (overseasRatio > 15) {
             overseasDetail = `現在、全体の <span class="advice-highlight">${overseasRatio}%</span> が海外での売上となっており、グローバル市場への適応がすでに始まっています！言葉が通じなくても、キャラクターのコミカルな動きや愛らしい表情、あるいはニュアンスだけで意図が伝わるデザインが国境を越えて愛されています。`;
-            overseasAction = `【海外拡販戦略】次回作では「文字（日本語）」を一切排除した【100%イラストのみの表情・リアクション特化版】を検討してください。また、台湾やタイなどの主要LINE普及国を意識し、少しオーバーな感情表現（大泣き、大笑い、ズッコケなど）を盛り込むと、さらに海外比率とファン層が拡大します。`;
+            overseasAction = `【海外拡販戦略】次回作では「文字」を一切排除した【100%イラストのみの表情・リアクション特化版】を検討してください。また、少しオーバーな感情表現を盛り込むと、さらに海外比率が拡大します。`;
         } else {
-            overseasDetail = `売上の大半が日本国内で発生しています。国内の日本語表現（「丁寧な敬語」「流行りのゆるいフレーズ」など）が現在のターゲット層（日本のLINEユーザー）に深く刺さっている大成功の証拠です。`;
+            overseasDetail = `売上の大半が日本国内で発生しています。国内の日本語表現（「丁寧な敬語」「流行りのゆるいフレーズ」など）が現在のターゲット層に深く刺さっている大成功の証拠です。`;
             overseasAction = `【国内深掘り戦略】無理に海外を狙う必要はありません。国内でのシェアを高めるため、「学校・職場・ママ友」など、さらに日本の日常生活の狭いシーンに特化した【シチュエーション限定スタンプ・絵文字】を横展開するのが最短ルートです。`;
         }
 
-        // 3. リリース効率・ストック資産アドバイスの強化
         let recentReleaseSales = 0;
         let activeProductsCount = 0;
         let totalRankedSales = 0;
@@ -966,14 +993,13 @@
             const recentRatio = Math.round((recentReleaseSales / totalRankedSales) * 100);
             if (recentRatio > 35) {
                 releaseDetail = `直近45日以内にリリースした新作群が、ショップ全体の売上比率の <span class="advice-highlight">${recentRatio}%</span> を牽引する【新着ブースト型】のショップ構造です。新キャラクターや最新の流行を取り入れたデザインが、今まさにユーザーのトレンドを捉えています！`;
-                releaseAction = `【新作最大化アクション】新着露出期間（リリース直後）が最も稼げるボーナスタイムです。この売れている勢いがあるうちに、同じキャラクターで「さらに使いやすい基本挨拶セット」や「毎日使える絵文字バージョン」など、間髪入れずに【スピンオフ・第2弾】を即座に投下して波を維持しましょう。`;
+                releaseAction = `【新作最大化アクション】新着露出期間が最も稼げるボーナスタイムです。この売れている勢いがあるうちに、同じキャラクターで「さらに使いやすい基本挨拶セット」や「毎日使える絵文字バージョン」など、間髪入れずに【スピンオフ・第2弾】を即座に投下して波を維持しましょう。`;
             } else {
                 releaseDetail = `売上の大部分を、過去にリリースした「ストック（過去作資産）」が長期的に維持している【安定ストック型】の非常に健全なショップです。流行り廃りに左右されず、ユーザーの「お気に入り」として定着し、日々安定して検索・購入され続けています。`;
-                releaseAction = `【ストック積み上げアクション】土台となる固定給のような売上が完成しているため、リスクを取ったチャレンジが可能です。既存の人気キャラの「別表情パターン」を増やすか、あるいは全く新しいジャンル・絵柄（例: 脱力系、キモカワ系、ミニマルな線画など）に挑戦して、新しいストックの柱をもう一本作りに行くのが最適です。`;
+                releaseAction = `【ストック積み上げアクション】土台となる固定給のような売上が完成しているため、リスクを取ったチャレンジが可能です。既存の人気キャラの別表情パターンを増やすか、あるいは全く新しいジャンル・絵柄に挑戦して、新しいストックの柱をもう一本作りに行くのが最適です。`;
             }
         }
 
-        // HTMLとして流し込み（リスト形式・ネクストアクション付き）
         adviceList.innerHTML += `
             <li>
                 <div class="advice-section-title">📅 曜日別の売上分析と最適なアプローチ</div>
@@ -998,13 +1024,12 @@
             `;
         }
 
-        // 4. 総数に応じたワンポイントアドバイス
         if (activeProductsCount >= 5 && topProduct !== '-') {
             adviceList.innerHTML += `
                 <li>
                     <div class="advice-section-title">🏆 現在の稼ぎ頭「${topProduct}」のレバレッジ（テコ入れ）</div>
-                    <div>ショップのエースである「${topProduct}」はお気に入り登録数やリピート率も高い傾向にあります。このキャラクターはユーザーにとって『認知度が高く、信頼できるブランド』になっています。</div>
-                    <div class="advice-nextaction">【横展開案】このエースキャラクターを主役に据えた、別カテゴリ（スタンプが売れていれば絵文字、絵文字が売れていれば着せかえ、または動くアニメーションスタンプ）への完全移植を行うことで、既存ファンがそのまま別カテゴリの商品もセットで購入してくれるため、最も低いコストで高確率なヒットを狙えます。</div>
+                    <div>ショップのエースである「${topProduct}」はお気に入り登録数やリピート率も高い傾向にあります。</div>
+                    <div class="advice-nextaction">【横展開案】このエースキャラクターを主役に据えた、別カテゴリ（スタンプが売れていれば絵文字、絵文字が売れていれば着せかえなど）への完全移植を行うことで、既存ファンがそのままセットで購入してくれるため、高確率なヒットを狙えます。</div>
                 </li>
             `;
         }
@@ -1034,7 +1059,6 @@
             for (let d = 1; d <= daysInMonth; d++) {
                 const dayBox = document.createElement('div'); dayBox.className = 'heatmap-day'; dayBox.textContent = d;
                 const dateKey = `${year}/${String(month + 1).padStart(2, '0')}／${String(d).padStart(2, '0')}`;
-                // フォーマットゆれ吸収
                 const altDateKey = `${year}/${String(month + 1).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
                 const dailySales = globalDateData[altDateKey] || globalDateData[dateKey] || 0;
 
@@ -1063,7 +1087,7 @@
     }
 
     function renderAllCharts(dateLabels, dateValues, weekdayAverages, categoryData, countryData) {
-        Object.keys(charts).forEach(key => { if (charts[key] && key !== 'ranking') { charts[key].destroy(); charts[key] = null; } });
+        Object.keys(charts).forEach(key => { if (charts[key] && key !== 'ranking' && key !== 'projection') { charts[key].destroy(); charts[key] = null; } });
 
         charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'), {
             type: 'bar', 
@@ -1385,6 +1409,138 @@
                 listContainer.appendChild(itemEl);
             });
         }
+    }
+
+    // ✨ 新規追加：過去の同日累積比較 ＆ 着地予測ロジック
+    function calculateMonthlyProjections() {
+        if (rawDates.length === 0) return;
+
+        // 読み込まれた売上データ内の「一番新しい日付」を基準（今日）にする
+        const latestDate = new Date(rawDates[rawDates.length - 1]);
+        const targetYear = latestDate.getFullYear();
+        const targetMonth = latestDate.getMonth(); 
+        const targetDay = latestDate.getDate();     
+        
+        document.getElementById('projCurrentDay').textContent = targetDay;
+
+        // 月ごとに「日別（1日〜31日）」の売上配列をマッピング
+        const monthlyDayMap = {}; 
+        
+        Object.keys(globalDateData).forEach(dStr => {
+            const dObj = new Date(dStr);
+            const mKey = `${dObj.getFullYear()}年${String(dObj.getMonth() + 1).padStart(2, '0')}月`;
+            const day = dObj.getDate();
+            const sales = globalDateData[dStr];
+
+            if (!monthlyDayMap[mKey]) {
+                monthlyDayMap[mKey] = Array(32).fill(0);
+            }
+            monthlyDayMap[mKey][day] = sales;
+        });
+
+        const allMonthsSorted = Object.keys(monthlyDayMap).sort();
+        const currentMonthKey = `${targetYear}年${String(targetMonth + 1).padStart(2, '0')}月`;
+
+        const labels = [];
+        const comparisonSalesData = []; 
+        const fullMonthSalesData = [];   
+        
+        let currentMonthSalesToDay = 0;
+        let paceRatios = []; 
+
+        allMonthsSorted.forEach(mKey => {
+            const daySalesArray = monthlyDayMap[mKey];
+            
+            // 1日〜指定日（今日）までの売上を累積
+            let sumToDay = 0;
+            for (let d = 1; d <= targetDay; d++) {
+                sumToDay += daySalesArray[d] || 0;
+            }
+
+            // その月の最終合計売上
+            let sumFullMonth = daySalesArray.reduce((a, b) => a + b, 0);
+
+            labels.push(mKey);
+            comparisonSalesData.push(sumToDay);
+            fullMonthSalesData.push(sumFullMonth);
+
+            if (mKey === currentMonthKey) {
+                currentMonthSalesToDay = sumToDay;
+            } else {
+                if (sumFullMonth > 0) {
+                    // 過去月が「今日の日付」時点で全体の何％を売り上げていたかのペース比率を収集
+                    paceRatios.push(sumToDay / sumFullMonth);
+                }
+            }
+        });
+
+        document.getElementById('projCurrentSales').textContent = `¥${currentMonthSalesToDay.toLocaleString()}`;
+
+        // 月末の総日数を取得
+        const daysInCurrentMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+        
+        // 予測A：日割り計算
+        let linearForecast = 0;
+        if (targetDay > 0) {
+            linearForecast = Math.round((currentMonthSalesToDay / targetDay) * daysInCurrentMonth);
+        }
+        document.getElementById('projLinearForecast').textContent = `¥${linearForecast.toLocaleString()}`;
+
+        // 予測B：過去ペース考慮計算
+        let paceForecast = currentMonthSalesToDay; 
+        if (paceRatios.length > 0) {
+            const avgRatio = paceRatios.reduce((a, b) => a + b, 0) / paceRatios.length;
+            if (avgRatio > 0) {
+                paceForecast = Math.round(currentMonthSalesToDay / avgRatio);
+            }
+        } else {
+            paceForecast = linearForecast;
+        }
+        document.getElementById('projPaceForecast').textContent = `¥${paceForecast.toLocaleString()}`;
+
+        // グラフの描画
+        const ctx = document.getElementById('projectionChart').getContext('2d');
+        if (charts.projection) {
+            charts.projection.destroy();
+        }
+
+        charts.projection = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: `${targetDay}日時点の累積売上`,
+                        data: comparisonSalesData,
+                        backgroundColor: '#06C755',
+                        borderRadius: 4
+                    },
+                    {
+                        label: `月末の最終総売上`,
+                        data: fullMonthSalesData,
+                        backgroundColor: 'rgba(189, 195, 199, 0.4)',
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ¥${context.raw.toLocaleString()}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { callback: (v) => `¥${v.toLocaleString()}` } }
+                }
+            }
+        });
     }
 
     function saveSingleElement(elementId, fileNameLabel) {
