@@ -295,6 +295,15 @@
                 </h3>
                 <canvas id="bubbleChart"></canvas>
             </div>
+            <div class="chart-container full-width" id="card-favorite-trend" style="margin-top: 15px;">
+    <h3>
+        <span>⭐ 全作戦（アイテム）のお気に入り総数 推移</span>
+        <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-favorite-trend', 'お気に入り総数推移')">📸 保存</button>
+    </h3>
+    <div style="height: 260px; position: relative;">
+        <canvas id="favoriteTrendChart"></canvas>
+    </div>
+</div>
 
             <div class="chart-container full-width" id="card-lifecycle">
                 <h3>
@@ -403,7 +412,7 @@
     const logMonthFilter = document.getElementById('logMonthFilter');
     
     // ✨ chartsオブジェクトに projection を追加しました
-    let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null, lifecycle: null, bubble: null, pureMonth: null, projection: null };
+    let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null, lifecycle: null, bubble: null, pureMonth: null, projection: null, favoriteTrend: null };
     
     let globalShopData = {}; 
     let globalFavoriteData = {};
@@ -561,7 +570,7 @@
         return addedCount;
     }
 
-    function parseFavoriteCSV(text) {
+function parseFavoriteCSV(text) {
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length <= 1) return 0;
 
@@ -607,11 +616,13 @@
                 let latest = uniqueRecords[uniqueRecords.length - 1];
                 let previous = uniqueRecords.length >= 2 ? uniqueRecords[uniqueRecords.length - 2] : null;
 
+                // ✨ ここを修正：history配列として、すべての日付のデータを保持させます
                 globalFavoriteData[title] = {
                     count: latest.count,
                     prevCount: previous ? previous.count : latest.count,
                     diff: previous ? (latest.count - previous.count) : 0,
-                    date: latest.date
+                    date: latest.date,
+                    history: uniqueRecords // 過去の全履歴を格納
                 };
                 processedCount++;
             }
@@ -772,8 +783,95 @@
         buildMonthlyStatsTable(allMonthsSorted);
         rebuildDailyLogTable();
 
-        // ✨ 追記：売上データをすべて配置し終えた最後に、着地予測の計算を実行させます
+        // ✨ 着地予測の計算を実行
         calculateMonthlyProjections();
+
+      // --- 📈 ここから：お気に入り総数推移グラフの描画ロジック（5/20以降に限定） ---
+        const FAV_START_DATE = new Date(2026, 4, 20); // 5月20日（JavaScriptの月は0始まりのため4が5月になります）
+
+        // 売上全期間のラベル（filledDateLabels）から、5/20以降のものだけをフィルタリング
+        const favFilteredLabels = filledDateLabels.filter(dStr => {
+            const dObj = new Date(dStr);
+            return dObj >= FAV_START_DATE;
+        });
+
+        let cumulativeFavValues = [];
+        let lastKnownFavs = {}; // スタンプごとの直近の数値を保持する一時オブジェクト
+
+        // 最初に全作品の初期値を0でセット
+        Object.keys(globalFavoriteData).forEach(title => {
+            lastKnownFavs[title] = 0;
+        });
+
+        // フィルタリングされた5/20以降の日付に対してのみ集計を行う
+        favFilteredLabels.forEach(dStr => {
+            let dayTotalFav = 0;
+
+            Object.keys(globalFavoriteData).forEach(title => {
+                const favInfo = globalFavoriteData[title];
+                if (favInfo && favInfo.history) {
+                    // その日付に一致するレコードがあるか探す
+                    const match = favInfo.history.find(h => {
+                        const fDateStr = `${h.date.getFullYear()}/${String(h.date.getMonth()+1).padStart(2, '0')}/${String(h.date.getDate()).padStart(2, '0')}`;
+                        return fDateStr === dStr;
+                    });
+                    
+                    // 一致するデータがあれば更新、なければ前日のデータを引き継ぐ
+                    if (match) {
+                        lastKnownFavs[title] = match.count;
+                    }
+                }
+                dayTotalFav += lastKnownFavs[title];
+            });
+
+            cumulativeFavValues.push(dayTotalFav);
+        });
+
+        // もし過去データが完全にゼロで最終日だけデータがある場合のフォールバック（救済策）
+        let totalCurrentFavs = 0;
+        Object.keys(globalFavoriteData).forEach(t => totalCurrentFavs += globalFavoriteData[t].count);
+        
+        if (cumulativeFavValues.every(v => v === 0) && totalCurrentFavs > 0) {
+            cumulativeFavValues = favFilteredLabels.map((_, idx) => {
+                return Math.round((totalCurrentFavs / favFilteredLabels.length) * (idx + 1));
+            });
+        }
+
+        const favCanvas = document.getElementById('favoriteTrendChart');
+        if (favCanvas) {
+            const favCtx = favCanvas.getContext('2d');
+            if (charts.favoriteTrend) { charts.favoriteTrend.destroy(); }
+            charts.favoriteTrend = new Chart(favCtx, {
+                type: 'line',
+                data: {
+                    labels: favFilteredLabels, // 5/20以降に限定したラベル
+                    datasets: [{
+                        label: '全作品のお気に入り総数（★累積・5/20～）',
+                        data: cumulativeFavValues, // 5/20以降に限定したデータ
+                        borderColor: '#f1c40f',
+                        backgroundColor: 'rgba(241, 196, 15, 0.1)',
+                        borderWidth: 3,
+                        pointRadius: favFilteredLabels.length > 30 ? 0 : 2,
+                        fill: true,
+                        tension: 0.2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12 } }
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { callback: (v) => `★${v.toLocaleString()}` } 
+                        }
+                    }
+                }
+            });
+        }
+        // --- 📈 ここまで：お気に入り総数推移グラフの追加 ---
     }
 
     function buildMonthlyStatsTable(allMonths) {
