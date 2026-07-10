@@ -205,6 +205,31 @@
                 <canvas id="rankingChart"></canvas>
                 <div id="rankingList" class="ranking-list-container"></div>
             </div>
+
+            <div class="chart-container full-width" id="card-favorite-list" style="margin-top: 15px;">
+                <h3>
+                    <span>⭐ お気に入り数 一覧（1件以上のみ）<span id="favListCount" class="selected-month-total" style="display:none; margin-left:6px;"></span></span>
+                    <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-favorite-list', 'お気に入り数一覧')">📸 保存</button>
+                </h3>
+                <div class="analysis-table-wrapper" style="max-height: 420px; overflow-y: auto;">
+                    <table class="analysis-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 36px;">#</th>
+                                <th>タイトル</th>
+                                <th class="text-right">⭐ お気に入り数</th>
+                                <th class="text-right">📈 前日比</th>
+                                <th style="width: 100px;">最終更新日</th>
+                            </tr>
+                        </thead>
+                        <tbody id="favoriteListTableBody">
+                            <tr><td colspan="5" style="text-align:center; color:#95a5a6;">お気に入り履歴CSVを読み込むとここに一覧表示されます</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="font-size: 10px; color: #95a5a6; margin-top: 6px;">※「前日比」は、読み込んだお気に入り履歴CSVにおける直近の記録日との差分です。</div>
+            </div>
+
 <div class="chart-container full-width" id="card-projection" style="margin-top: 15px;">
     <h3>
         <span>🔮 月途中の同日比較 ＆ 今月の着地予測（今日：<span id="projCurrentDay">--</span>日目）</span>
@@ -729,6 +754,7 @@ function parseFavoriteCSV(text) {
     function refreshDashboard() {
         if (Object.keys(globalProductTotals).length === 0) {
             updateRankingChart();
+            buildFavoriteListTable();
             return;
         }
 
@@ -804,6 +830,7 @@ function parseFavoriteCSV(text) {
         generateAutoAdvice(weekdayAverages, globalCountryData, totalSales, topProductTitle);
         
         buildMonthlyStatsTable(allMonthsSorted);
+        buildFavoriteListTable();
         rebuildDailyLogTable();
 
         // ✨ 着地予測の計算を実行
@@ -895,6 +922,59 @@ function parseFavoriteCSV(text) {
             });
         }
         // --- 📈 ここまで：お気に入り総数推移グラフの追加 ---
+    }
+
+    function buildFavoriteListTable() {
+        const tbody = document.getElementById('favoriteListTableBody');
+        const countLabel = document.getElementById('favListCount');
+        if (!tbody) return;
+
+        const items = Object.keys(globalFavoriteData)
+            .map(title => {
+                const f = globalFavoriteData[title];
+                return { title, count: f.count, prevCount: f.prevCount, diff: f.diff, date: f.date };
+            })
+            .filter(item => item.count > 0)
+            .sort((a, b) => b.count - a.count);
+
+        if (countLabel) {
+            if (items.length > 0) {
+                countLabel.style.display = 'inline-block';
+                countLabel.textContent = `対象 ${items.length} 件`;
+            } else {
+                countLabel.style.display = 'none';
+            }
+        }
+
+        tbody.innerHTML = '';
+        if (items.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#95a5a6;">お気に入りが1件以上ある作品はまだありません。</td></tr>`;
+            return;
+        }
+
+        items.forEach((item, idx) => {
+            const tr = document.createElement('tr');
+
+            let diffHtml;
+            if (item.diff > 0) {
+                diffHtml = `<span class="badge-count">▲ +${item.diff.toLocaleString()}</span>`;
+            } else if (item.diff < 0) {
+                diffHtml = `<span class="badge-total">▼ ${item.diff.toLocaleString()}</span>`;
+            } else {
+                diffHtml = `<span class="badge-gray">± 0</span>`;
+            }
+
+            const dateLabel = item.date ? `${item.date.getFullYear()}/${item.date.getMonth() + 1}/${item.date.getDate()}` : '-';
+
+            tr.innerHTML = `
+                <td>${idx + 1}</td>
+                <td style="font-weight: bold;">${item.title}</td>
+                <td class="text-right">⭐ ${item.count.toLocaleString()}</td>
+                <td class="text-right">${diffHtml}</td>
+                <td style="font-size: 11px; color: #7f8c8d;">${dateLabel}</td>
+            `;
+            tbody.appendChild(tr);
+        });
     }
 
     function buildMonthlyStatsTable(allMonths) {
