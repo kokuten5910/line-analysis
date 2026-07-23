@@ -330,6 +330,23 @@
     </div>
 </div>
 
+<div class="chart-container full-width" id="card-favorite-diff" style="margin-top: 15px;">
+    <h3>
+        <span>
+            ⭐ お気に入り 日次増減
+            <div class="filter-group" style="display:inline-flex; margin-left:8px; vertical-align:middle;">
+                <select id="favDiffProductFilter" class="month-select" onchange="renderFavoriteDiffChart()">
+                    <option value="all">全作品合計</option>
+                </select>
+            </div>
+        </span>
+        <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-favorite-diff', 'お気に入り日次増減')">📸 保存</button>
+    </h3>
+    <div style="height: 260px; position: relative;">
+        <canvas id="favoriteDiffChart"></canvas>
+    </div>
+</div>
+
             <div class="chart-container full-width" id="card-lifecycle">
                 <h3>
                     <span>📈 経過日数別の累積売上カーブ（作品寿命と成長速度の比較）</span>
@@ -453,12 +470,15 @@
     const trendMonthFilter = document.getElementById('trendMonthFilter');
     const trendTitle = document.getElementById('trendTitle');
     const logMonthFilter = document.getElementById('logMonthFilter');
+    const favDiffProductFilter = document.getElementById('favDiffProductFilter');
     
     // ✨ chartsオブジェクトに projection を追加しました
-    let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null, lifecycle: null, bubble: null, pureMonth: null, projection: null, favoriteTrend: null };
+    let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null, lifecycle: null, bubble: null, pureMonth: null, projection: null, favoriteTrend: null, favoriteDiff: null };
     
     let globalShopData = {}; 
     let globalFavoriteData = {};
+    // ⭐ お気に入り日次増減グラフ用：日付ラベル・全体合計・作品別の日次シリーズを保持
+    let favoriteDailySeries = { labels: [], totals: [], perTitle: {} };
 
     let globalProductTotals = {};
     let monthlyProductTotals = {};
@@ -817,6 +837,16 @@ function parseFavoriteCSV(text) {
         });
         if ([...trendProductFilter.options].some(o => o.value === currentProductSel)) { trendProductFilter.value = currentProductSel; }
 
+        // ⭐ お気に入り日次増減グラフの作品選択プルダウンを更新
+        if (favDiffProductFilter) {
+            const currentFavDiffSel = favDiffProductFilter.value;
+            favDiffProductFilter.innerHTML = '<option value="all">全作品合計</option>';
+            Object.keys(globalFavoriteData).sort((a, b) => globalFavoriteData[b].count - globalFavoriteData[a].count).forEach(title => {
+                const opt = document.createElement('option'); opt.value = title; opt.textContent = title; favDiffProductFilter.appendChild(opt);
+            });
+            if ([...favDiffProductFilter.options].some(o => o.value === currentFavDiffSel)) { favDiffProductFilter.value = currentFavDiffSel; }
+        }
+
         const sortedGlobal = Object.keys(globalProductTotals).map(k => ({ t: k, s: globalProductTotals[k].sales })).sort((a, b) => b.s - a.s);
         let topProductTitle = '-';
         if(sortedGlobal.length > 0) {
@@ -847,10 +877,12 @@ function parseFavoriteCSV(text) {
 
         let cumulativeFavValues = [];
         let lastKnownFavs = {}; // スタンプごとの直近の数値を保持する一時オブジェクト
+        let perTitleFavSeries = {}; // ⭐ 作品ごとの日次シリーズ（日次増減グラフの作品別表示用）
 
         // 最初に全作品の初期値を0でセット
         Object.keys(globalFavoriteData).forEach(title => {
             lastKnownFavs[title] = 0;
+            perTitleFavSeries[title] = [];
         });
 
         // フィルタリングされた5/20以降の日付に対してのみ集計を行う
@@ -872,6 +904,7 @@ function parseFavoriteCSV(text) {
                     }
                 }
                 dayTotalFav += lastKnownFavs[title];
+                perTitleFavSeries[title].push(lastKnownFavs[title]);
             });
 
             cumulativeFavValues.push(dayTotalFav);
@@ -922,6 +955,77 @@ function parseFavoriteCSV(text) {
             });
         }
         // --- 📈 ここまで：お気に入り総数推移グラフの追加 ---
+
+        // ⭐ 日次増減グラフ用に、日付ラベル・全体合計・作品別シリーズを保存して描画
+        favoriteDailySeries = {
+            labels: favFilteredLabels,
+            totals: cumulativeFavValues,
+            perTitle: perTitleFavSeries
+        };
+        renderFavoriteDiffChart();
+    }
+
+    // ⭐ お気に入り 日次増減グラフ（棒グラフ・増加=緑／減少=赤）
+    function renderFavoriteDiffChart() {
+        const canvas = document.getElementById('favoriteDiffChart');
+        if (!canvas) return;
+
+        const selected = favDiffProductFilter ? favDiffProductFilter.value : 'all';
+        const labels = favoriteDailySeries.labels || [];
+        const seriesValues = selected === 'all'
+            ? (favoriteDailySeries.totals || [])
+            : (favoriteDailySeries.perTitle[selected] || []);
+
+        if (labels.length === 0 || seriesValues.length === 0) {
+            if (charts.favoriteDiff) { charts.favoriteDiff.destroy(); charts.favoriteDiff = null; }
+            return;
+        }
+
+        // 前日比（先頭日は差分を出せないので除外）
+        const diffLabels = labels.slice(1);
+        const diffValues = seriesValues.slice(1).map((v, i) => v - seriesValues[i]);
+
+        const bgColors = diffValues.map(v => v >= 0 ? 'rgba(39, 174, 96, 0.75)' : 'rgba(231, 76, 60, 0.75)');
+        const borderColors = diffValues.map(v => v >= 0 ? '#27ae60' : '#e74c3c');
+
+        const seriesLabel = selected === 'all' ? '全作品合計の日次増減（★）' : `「${selected}」の日次増減（★）`;
+
+        const ctx = canvas.getContext('2d');
+        if (charts.favoriteDiff) { charts.favoriteDiff.destroy(); }
+        charts.favoriteDiff = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: diffLabels,
+                datasets: [{
+                    label: seriesLabel,
+                    data: diffValues,
+                    backgroundColor: bgColors,
+                    borderColor: borderColors,
+                    borderWidth: 1,
+                    borderRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12 } },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const v = context.raw;
+                                return `${v >= 0 ? '+' : ''}${v.toLocaleString()}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: { callback: (v) => `${v >= 0 ? '+' : ''}${v.toLocaleString()}` }
+                    }
+                }
+            }
+        });
     }
 
     function buildFavoriteListTable() {
