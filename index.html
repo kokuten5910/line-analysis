@@ -490,12 +490,34 @@
 
     let dailySoldTitlesLog = {}; 
 
-    function estimateQty(salesAmt) {
+    // ✨ カテゴリ別の想定単価（円）
+    // スタンプ・絵文字： 実績ベースの平均単価（約52円）
+    // 着せ替え： 販売経路によって92円 or 130円だが、CSVからは区別できないため
+    //           2つの単価の中間値（111円）を採用して個数を概算します
+    const UNIT_PRICE_STICKER_EMOJI = 52;
+    const UNIT_PRICE_KISEKAE = (92 + 130) / 2; // 111円
+
+    function isKisekaeCategory(category) {
+        if (!category) return false;
+        const c = category.toString();
+        return c.includes('着せ替え') || c.includes('着せかえ') || c.toLowerCase().includes('theme');
+    }
+
+    function estimateQty(salesAmt, category) {
         if (salesAmt <= 0) return 0;
-        if (salesAmt <= 75) return 1;
-        if (salesAmt <= 120) return 2;
-        if (salesAmt <= 170) return 3;
-        return Math.round(salesAmt / 52);
+
+        const unitPrice = isKisekaeCategory(category) ? UNIT_PRICE_KISEKAE : UNIT_PRICE_STICKER_EMOJI;
+
+        // 基準単価52円のときの実績しきい値（75/120/170）と同じ比率を
+        // 新しい単価にも適用し、少数個数のブレを吸収します
+        const t1 = unitPrice * (75 / UNIT_PRICE_STICKER_EMOJI);
+        const t2 = unitPrice * (120 / UNIT_PRICE_STICKER_EMOJI);
+        const t3 = unitPrice * (170 / UNIT_PRICE_STICKER_EMOJI);
+
+        if (salesAmt <= t1) return 1;
+        if (salesAmt <= t2) return 2;
+        if (salesAmt <= t3) return 3;
+        return Math.round(salesAmt / unitPrice);
     }
 
     function showStatus(message, isSuccess = true) {
@@ -722,7 +744,7 @@ function parseFavoriteCSV(text) {
             const dateObj = parseSafeDate(dateStr);
             if (isNaN(dateObj.getTime())) continue;
             
-            const qty = estimateQty(sales);
+            const qty = estimateQty(sales, category);
             rawDates.push(dateObj);
 
             if (!globalProductTotals[title]) {
