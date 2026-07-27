@@ -1800,7 +1800,9 @@ function rebuildDailyLogTable() {
         const fullMonthSalesData = [];   
         
         let currentMonthSalesToDay = 0;
-        let paceRatios = []; 
+        let paceRatios = []; // 参考情報として各月の進捗率は保持（表示や将来の分析用）
+        let totalPastSumToDay = 0;    // 過去月の「targetDay日目まで」の売上合計（重み付け用）
+        let totalPastSumFullMonth = 0; // 過去月の「月間総売上」の合計（重み付け用）
 
         allMonthsSorted.forEach(mKey => {
             const daySalesArray = monthlyDayMap[mKey];
@@ -1821,6 +1823,11 @@ function rebuildDailyLogTable() {
             } else {
                 if (sumFullMonth > 0) {
                     paceRatios.push(sumToDay / sumFullMonth);
+                    // 月ごとの比率を単純平均すると、売上が少ない/特定日に偏った月に
+                    // 予測全体が過度に引っ張られてしまうため、売上規模で重み付けした
+                    // 「合算比率」を別途計算する（下記で使用）
+                    totalPastSumToDay += sumToDay;
+                    totalPastSumFullMonth += sumFullMonth;
                 }
             }
         });
@@ -1835,14 +1842,22 @@ function rebuildDailyLogTable() {
         }
         document.getElementById('projLinearForecast').textContent = `¥${linearForecast.toLocaleString()}`;
 
-        let paceForecast = currentMonthSalesToDay; 
-        if (paceRatios.length > 0) {
-            const avgRatio = paceRatios.reduce((a, b) => a + b, 0) / paceRatios.length;
-            if (avgRatio > 0) {
-                paceForecast = Math.round(currentMonthSalesToDay / avgRatio);
+        // 【修正】過去月ごとの比率を単純平均するのではなく、各月の売上規模で
+        // 重み付けした「合算比率」（全過去月のtargetDay日目までの合計 ÷ 全過去月の月間合計）を使う。
+        // これにより、売上が少ない月・特定日に偏った月1件が平均を大きく歪めることを防ぐ。
+        let paceForecast = linearForecast; // データ不足時は日割り予測にフォールバック
+        if (totalPastSumFullMonth > 0) {
+            const pooledRatio = totalPastSumToDay / totalPastSumFullMonth;
+            if (pooledRatio > 0) {
+                const rawPaceForecast = currentMonthSalesToDay / pooledRatio;
+
+                // 【修正】月の序盤（データが少ない日数）は比率自体が不安定でブレやすいため、
+                // 日割り単純計算とブレンドして急激な予測の跳ね上がりを抑える。
+                // targetDayが増える（データが溜まる）につれ、徐々にペース予測の比重を上げる。
+                const reliableDays = 7; // このくらい経てばペース予測をフルに信頼する目安
+                const reliability = Math.min(1, targetDay / reliableDays);
+                paceForecast = Math.round(rawPaceForecast * reliability + linearForecast * (1 - reliability));
             }
-        } else {
-            paceForecast = linearForecast;
         }
         document.getElementById('projPaceForecast').textContent = `¥${paceForecast.toLocaleString()}`;
 
