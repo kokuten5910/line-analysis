@@ -445,7 +445,7 @@
         <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
             <thead>
                 <tr style="background-color: #f4f6f9; text-align: left;">
-                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">作品名</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">作品名（種別 / 販売国 / お気に入り）</th>
                     <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">推定個数</th>
                     <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">売上金額</th>
                 </tr>
@@ -785,10 +785,17 @@ function parseFavoriteCSV(text) {
         dailySoldTitlesLog[standardizedDateStr] = {};
     }
     if (!dailySoldTitlesLog[standardizedDateStr][title]) {
-        dailySoldTitlesLog[standardizedDateStr][title] = { sales: 0, qty: 0 };
+        // 【追加】種別（カテゴリ）と国別内訳もここで保持する
+        dailySoldTitlesLog[standardizedDateStr][title] = { sales: 0, qty: 0, category: category, japanSales: 0, overseasSales: 0 };
     }
     dailySoldTitlesLog[standardizedDateStr][title].sales += sales;
     dailySoldTitlesLog[standardizedDateStr][title].qty += qty;
+    dailySoldTitlesLog[standardizedDateStr][title].category = category; // CSV行のカテゴリで随時更新（通常は同一想定）
+    if (country === '日本') {
+        dailySoldTitlesLog[standardizedDateStr][title].japanSales += sales;
+    } else {
+        dailySoldTitlesLog[standardizedDateStr][title].overseasSales += sales;
+    }
             }
         } // ← forループの閉じカッコ
     } // ← parseSalesCSV関数の閉じカッコ
@@ -1949,6 +1956,30 @@ function rebuildDailyLogTable() {
         });
     }
 
+// 【追加】カテゴリ文字列から表示用バッジ（色・ラベル）を判定する
+function getCategoryBadgeInfo(category) {
+    const c = (category || '').toString();
+    if (c.includes('スタンプ') || c.toLowerCase().includes('sticker')) {
+        return { label: 'スタンプ', bg: '#eaf2f8', color: '#2980b9' };
+    } else if (c.includes('絵文字') || c.toLowerCase().includes('emoji')) {
+        return { label: '絵文字', bg: '#f5eef8', color: '#8e44ad' };
+    } else if (c.includes('着せ替え') || c.includes('着せかえ') || c.toLowerCase().includes('theme')) {
+        return { label: '着せ替え', bg: '#fef5e7', color: '#d35400' };
+    }
+    return { label: c || '不明', bg: '#f2f4f4', color: '#7f8c8d' };
+}
+
+// 【追加】タイトルの文字数に応じて一行に収まるフォントサイズを算出する
+function getFitTitleFontSize(title) {
+    const len = (title || '').length;
+    if (len <= 8) return 14;
+    if (len <= 12) return 13;
+    if (len <= 16) return 12;
+    if (len <= 20) return 11;
+    if (len <= 26) return 10;
+    return 9;
+}
+
 function showDailyDetail(dStr) {
     const detailArea = document.getElementById('daily-detail-area');
     const dateLabel = document.getElementById('selected-date-label');
@@ -1976,13 +2007,36 @@ function showDailyDetail(dStr) {
         const item = dayData[title];
         totalDaySales += item.sales;
         totalDayQty += item.qty;
+
+        // 【追加】種別バッジ
+        const catInfo = getCategoryBadgeInfo(item.category);
+        const catBadgeHtml = `<span style="font-size: 10px; font-weight: bold; color: ${catInfo.color}; background: ${catInfo.bg}; padding: 1px 6px; border-radius: 10px;">${catInfo.label}</span>`;
+
+        // 【追加】販売国バッジ（日本のみ／海外のみ／両方）
+        const hasJapan = (item.japanSales || 0) > 0;
+        const hasOverseas = (item.overseasSales || 0) > 0;
+        let countryLabel = '不明';
+        if (hasJapan && hasOverseas) countryLabel = '🌐 日本+海外';
+        else if (hasJapan) countryLabel = '🇯🇵 日本';
+        else if (hasOverseas) countryLabel = '🌏 海外';
+        const countryBadgeHtml = `<span style="font-size: 10px; font-weight: bold; color: #27ae60; background: #e8f8f5; padding: 1px 6px; border-radius: 10px;">${countryLabel}</span>`;
+
+        // 【追加】お気に入り数（小さく表示。データが無ければ非表示）
+        const favInfo = globalFavoriteData[title];
+        const favBadgeHtml = favInfo ? `<span style="font-size: 10px; font-weight: bold; color: #e67e22; background: #fef5e7; padding: 1px 6px; border-radius: 10px;">⭐ ${favInfo.count.toLocaleString()}</span>` : '';
+
+        // 【追加】文字数の多いタイトルでも折り返さず一行に収まるようフォントサイズを自動調整
+        const titleFontSize = getFitTitleFontSize(title);
         
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #eee';
         tr.innerHTML = `
-            <td style="padding: 10px; font-weight: bold; color: #333;">${title}</td>
-            <td style="padding: 10px; text-align: right; color: #666;">${item.qty.toLocaleString()} 個</td>
-            <td style="padding: 10px; text-align: right; font-weight: bold; color: #e74c3c;">¥${item.sales.toLocaleString()}</td>
+            <td style="padding: 10px; max-width: 0; width: 55%;">
+                <div style="font-weight: bold; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: ${titleFontSize}px;" title="${title}">${title}</div>
+                <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">${catBadgeHtml}${countryBadgeHtml}${favBadgeHtml}</div>
+            </td>
+            <td style="padding: 10px; text-align: right; color: #666; white-space: nowrap;">${item.qty.toLocaleString()} 個</td>
+            <td style="padding: 10px; text-align: right; font-weight: bold; color: #e74c3c; white-space: nowrap;">¥${item.sales.toLocaleString()}</td>
         `;
         tableBody.appendChild(tr);
     });
