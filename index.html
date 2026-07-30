@@ -242,14 +242,19 @@
             <div id="projCurrentSales" style="font-size: 20px; font-weight: bold; color: #2c3e50;">¥0</div>
         </div>
         <div style="background: #fdf2e9; border: 1px solid #e67e22; padding: 12px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 11px; color: #e67e22; font-weight: bold;">🎯 予測着地（過去の売上ペース基準）</div>
-            <div id="projPaceForecast" style="font-size: 20px; font-weight: bold; color: #d35400;">¥0</div>
-            <div style="font-size: 9px; color: #7f8c8d; margin-top: 2px;">過去の月内進捗トレンドから逆算</div>
+            <div style="font-size: 11px; color: #e67e22; font-weight: bold;">🎯 予測着地（曜日パターン基準）</div>
+            <div id="projWeekdayForecast" style="font-size: 20px; font-weight: bold; color: #d35400;">¥0</div>
+            <div style="font-size: 9px; color: #7f8c8d; margin-top: 2px;">残り日数を曜日別の実績平均で積み上げ</div>
+        </div>
+        <div style="background: #f4ecf7; border: 1px solid #8e44ad; padding: 12px; border-radius: 6px; text-align: center;">
+            <div style="font-size: 11px; color: #8e44ad; font-weight: bold;">📐 予測着地（直近傾向・幅あり）</div>
+            <div id="projPaceForecast" style="font-size: 18px; font-weight: bold; color: #6c3483;">¥0</div>
+            <div style="font-size: 9px; color: #7f8c8d; margin-top: 2px;">直近数ヶ月を重み付け（新しい月ほど重視）</div>
         </div>
         <div style="background: #ebf5fb; border: 1px solid #2980b9; padding: 12px; border-radius: 6px; text-align: center;">
             <div style="font-size: 11px; color: #2980b9; font-weight: bold;">🧮 予測着地（日割り単純計算）</div>
             <div id="projLinearForecast" style="font-size: 20px; font-weight: bold; color: #2c3e50;">¥0</div>
-            <div style="font-size: 9px; color: #7f8c8d; margin-top: 2px;">1日あたりの平均売上 × 月末日数</div>
+            <div style="font-size: 9px; color: #7f8c8d; margin-top: 2px;">1日あたりの平均売上 × 月末日数（参考値）</div>
         </div>
     </div>
 
@@ -386,6 +391,10 @@
                 <h3>
                     <span id="trendTitle">📊 売上推移</span>
                     <div class="filter-group">
+                        <select id="trendMetricFilter" class="month-select">
+                            <option value="sales" selected>💰 売上高</option>
+                            <option value="qty">🔢 売上個数</option>
+                        </select>
                         <select id="trendUnitFilter" class="month-select">
                             <option value="daily" selected>📅 日別表示</option>
                             <option value="weekly">🗓️ 週別表示（合計）</option>
@@ -445,7 +454,7 @@
         <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
             <thead>
                 <tr style="background-color: #f4f6f9; text-align: left;">
-                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">作品名（種別 / 販売国 / お気に入り）</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">作品名</th>
                     <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">推定個数</th>
                     <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">売上金額</th>
                 </tr>
@@ -467,6 +476,7 @@
     const heatmapMonthFilter = document.getElementById('heatmapMonthFilter');
     const trendProductFilter = document.getElementById('trendProductFilter');
     const trendUnitFilter = document.getElementById('trendUnitFilter');
+    const trendMetricFilter = document.getElementById('trendMetricFilter');
     const trendMonthFilter = document.getElementById('trendMonthFilter');
     const trendTitle = document.getElementById('trendTitle');
     const logMonthFilter = document.getElementById('logMonthFilter');
@@ -483,12 +493,15 @@
     let globalProductTotals = {};
     let monthlyProductTotals = {};
     let globalDateData = {};
+    let globalDateQtyData = {};
     let globalProductDateData = {}; 
+    let globalProductDateQtyData = {};
     let globalCategoryData = {};
     let globalCountryData = {};
     let rawDates = [];
 
     let dailySoldTitlesLog = {}; 
+    let globalWeekdayAverages = Array(7).fill(0); // ✨ 着地予測（曜日パターン基準）で使用
 
     // ✨ カテゴリ別の想定単価（円）
     // スタンプ・絵文字： 実績ベースの平均単価（約52円）
@@ -532,7 +545,9 @@
         globalProductTotals = {};
         monthlyProductTotals = {};
         globalDateData = {};
+        globalDateQtyData = {};
         globalProductDateData = {}; 
+        globalProductDateQtyData = {};
         globalCategoryData = {};
         globalCountryData = {};
         rawDates = [];
@@ -556,6 +571,7 @@
     heatmapMonthFilter.addEventListener('change', () => { updateHeatmapVisibility(heatmapMonthFilter.value); });
     trendProductFilter.addEventListener('change', () => { updateTrendChartOnly(); }); 
     trendUnitFilter.addEventListener('change', () => { updateTrendChartOnly(); });
+    trendMetricFilter.addEventListener('change', () => { updateTrendChartOnly(); });
     trendMonthFilter.addEventListener('change', () => { updateTrendChartOnly(); });
     logMonthFilter.addEventListener('change', () => { rebuildDailyLogTable(); });
 
@@ -773,9 +789,12 @@ function parseFavoriteCSV(text) {
 
             const standardizedDateStr = `${dateObj.getFullYear()}/${String(dateObj.getMonth()+1).padStart(2, '0')}/${String(dateObj.getDate()).padStart(2, '0')}`;
             globalDateData[standardizedDateStr] = (globalDateData[standardizedDateStr] || 0) + sales;
+            globalDateQtyData[standardizedDateStr] = (globalDateQtyData[standardizedDateStr] || 0) + qty;
             
             if (!globalProductDateData[title]) globalProductDateData[title] = {};
             globalProductDateData[title][standardizedDateStr] = (globalProductDateData[title][standardizedDateStr] || 0) + sales;
+            if (!globalProductDateQtyData[title]) globalProductDateQtyData[title] = {};
+            globalProductDateQtyData[title][standardizedDateStr] = (globalProductDateQtyData[title][standardizedDateStr] || 0) + qty;
 
             globalCategoryData[category] = (globalCategoryData[category] || 0) + sales;
             globalCountryData[country] = (globalCountryData[country] || 0) + sales;
@@ -785,17 +804,10 @@ function parseFavoriteCSV(text) {
         dailySoldTitlesLog[standardizedDateStr] = {};
     }
     if (!dailySoldTitlesLog[standardizedDateStr][title]) {
-        // 【追加】種別（カテゴリ）と国別内訳もここで保持する
-        dailySoldTitlesLog[standardizedDateStr][title] = { sales: 0, qty: 0, category: category, japanSales: 0, overseasSales: 0 };
+        dailySoldTitlesLog[standardizedDateStr][title] = { sales: 0, qty: 0 };
     }
     dailySoldTitlesLog[standardizedDateStr][title].sales += sales;
     dailySoldTitlesLog[standardizedDateStr][title].qty += qty;
-    dailySoldTitlesLog[standardizedDateStr][title].category = category; // CSV行のカテゴリで随時更新（通常は同一想定）
-    if (country === '日本') {
-        dailySoldTitlesLog[standardizedDateStr][title].japanSales += sales;
-    } else {
-        dailySoldTitlesLog[standardizedDateStr][title].overseasSales += sales;
-    }
             }
         } // ← forループの閉じカッコ
     } // ← parseSalesCSV関数の閉じカッコ
@@ -829,6 +841,7 @@ function parseFavoriteCSV(text) {
         }
 
         const weekdayAverages = weekdaySales.map((s, i) => weekdayCounts[i] > 0 ? Math.round(s / weekdayCounts[i]) : 0);
+        globalWeekdayAverages = weekdayAverages;
 
         document.getElementById('captureArea').style.display = 'block';
         document.getElementById('totalSales').textContent = `¥${totalSales.toLocaleString()}`;
@@ -1224,6 +1237,11 @@ function rebuildDailyLogTable() {
         const selectedProduct = trendProductFilter.value;
         const unitMode = trendUnitFilter.value;
         const selectedMonth = trendMonthFilter.value;
+        const metric = trendMetricFilter ? trendMetricFilter.value : 'sales'; // 'sales' or 'qty'
+        const dateDataSource = metric === 'qty' ? globalDateQtyData : globalDateData;
+        const productDateDataSource = metric === 'qty' ? globalProductDateQtyData : globalProductDateData;
+        const metricLabel = metric === 'qty' ? '売上個数' : '売上高';
+        const metricUnit = metric === 'qty' ? '個' : '円';
         
         let loopStartDate = new Date(rawDates[0]);
         let loopEndDate = new Date(rawDates[rawDates.length - 1]);
@@ -1239,20 +1257,20 @@ function rebuildDailyLogTable() {
         }
         
         let finalLabels = []; let finalValues = [];
-        let labelName = selectedProduct === 'all' ? '売上高' : `${selectedProduct}`;
+        let labelName = selectedProduct === 'all' ? metricLabel : `${selectedProduct}（${metricLabel}）`;
 
         if (unitMode === 'daily') {
-            trendTitle.textContent = selectedMonth === 'all' ? '📊 日別売上推移（全期間）' : `📊 日別売上推移（${selectedMonth}）`;
+            trendTitle.textContent = selectedMonth === 'all' ? `📊 日別${metricLabel}推移（全期間）` : `📊 日別${metricLabel}推移（${selectedMonth}）`;
             let curr = new Date(loopStartDate);
             while (curr <= loopEndDate) {
                 const dStr = `${curr.getFullYear()}/${String(curr.getMonth()+1).padStart(2, '0')}/${String(curr.getDate()).padStart(2, '0')}`;
                 finalLabels.push(dStr);
-                if (selectedProduct === 'all') finalValues.push(globalDateData[dStr] || 0);
-                else { const prodData = globalProductDateData[selectedProduct] || {}; finalValues.push(prodData[dStr] || 0); }
+                if (selectedProduct === 'all') finalValues.push(dateDataSource[dStr] || 0);
+                else { const prodData = productDateDataSource[selectedProduct] || {}; finalValues.push(prodData[dStr] || 0); }
                 curr.setDate(curr.getDate() + 1);
             }
         } else {
-            trendTitle.textContent = selectedMonth === 'all' ? '📊 週別売上合計推移（全期間）' : `📊 週別売上合計推移（${selectedMonth}内）`;
+            trendTitle.textContent = selectedMonth === 'all' ? `📊 週別${metricLabel}合計推移（全期間）` : `📊 週別${metricLabel}合計推移（${selectedMonth}内）`;
             let currentTrack = new Date(loopStartDate);
             const currentDay = currentTrack.getDay();
             const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay; 
@@ -1263,15 +1281,17 @@ function rebuildDailyLogTable() {
                 const weekLabel = `${currentTrack.getFullYear()}/${String(currentTrack.getMonth()+1).padStart(2, '0')}／${String(currentTrack.getDate()).padStart(2, '0')} の週`;
                 for (let i = 0; i < 7; i++) {
                     const dStr = `${currentTrack.getFullYear()}/${String(currentTrack.getMonth()+1).padStart(2, '0')}/${String(currentTrack.getDate()).padStart(2, '0')}`;
-                    if (selectedProduct === 'all') weekSum += (globalDateData[dStr] || 0);
-                    else { const prodData = globalProductDateData[selectedProduct] || {}; weekSum += (prodData[dStr] || 0); }
+                    if (selectedProduct === 'all') weekSum += (dateDataSource[dStr] || 0);
+                    else { const prodData = productDateDataSource[selectedProduct] || {}; weekSum += (prodData[dStr] || 0); }
                     currentTrack.setDate(currentTrack.getDate() + 1);
                 }
                 finalLabels.push(weekLabel); finalValues.push(weekSum);
             }
         }
         charts.trend.data.labels = finalLabels; charts.trend.data.datasets[0].data = finalValues;
-        charts.trend.data.datasets[0].label = `${labelName} (${unitMode === 'daily' ? '日別' : '週次合計'})`; charts.trend.update();
+        charts.trend.data.datasets[0].label = `${labelName} (${unitMode === 'daily' ? '日別' : '週次合計'}・${metricUnit})`;
+        charts.trend.data.datasets[0].backgroundColor = metric === 'qty' ? '#2980b9' : '#06C755';
+        charts.trend.update();
     }
 
     function generateAutoAdvice(weekdayAverages, countryData, totalSales, topProduct) {
@@ -1807,9 +1827,7 @@ function rebuildDailyLogTable() {
         const fullMonthSalesData = [];   
         
         let currentMonthSalesToDay = 0;
-        let paceRatios = []; // 参考情報として各月の進捗率は保持（表示や将来の分析用）
-        let totalPastSumToDay = 0;    // 過去月の「targetDay日目まで」の売上合計（重み付け用）
-        let totalPastSumFullMonth = 0; // 過去月の「月間総売上」の合計（重み付け用）
+        let paceRatios = []; 
 
         allMonthsSorted.forEach(mKey => {
             const daySalesArray = monthlyDayMap[mKey];
@@ -1830,11 +1848,6 @@ function rebuildDailyLogTable() {
             } else {
                 if (sumFullMonth > 0) {
                     paceRatios.push(sumToDay / sumFullMonth);
-                    // 月ごとの比率を単純平均すると、売上が少ない/特定日に偏った月に
-                    // 予測全体が過度に引っ張られてしまうため、売上規模で重み付けした
-                    // 「合算比率」を別途計算する（下記で使用）
-                    totalPastSumToDay += sumToDay;
-                    totalPastSumFullMonth += sumFullMonth;
                 }
             }
         });
@@ -1849,24 +1862,58 @@ function rebuildDailyLogTable() {
         }
         document.getElementById('projLinearForecast').textContent = `¥${linearForecast.toLocaleString()}`;
 
-        // 【修正】過去月ごとの比率を単純平均するのではなく、各月の売上規模で
-        // 重み付けした「合算比率」（全過去月のtargetDay日目までの合計 ÷ 全過去月の月間合計）を使う。
-        // これにより、売上が少ない月・特定日に偏った月1件が平均を大きく歪めることを防ぐ。
-        let paceForecast = linearForecast; // データ不足時は日割り予測にフォールバック
-        if (totalPastSumFullMonth > 0) {
-            const pooledRatio = totalPastSumToDay / totalPastSumFullMonth;
-            if (pooledRatio > 0) {
-                const rawPaceForecast = currentMonthSalesToDay / pooledRatio;
-
-                // 【修正】月の序盤（データが少ない日数）は比率自体が不安定でブレやすいため、
-                // 日割り単純計算とブレンドして急激な予測の跳ね上がりを抑える。
-                // targetDayが増える（データが溜まる）につれ、徐々にペース予測の比重を上げる。
-                const reliableDays = 7; // このくらい経てばペース予測をフルに信頼する目安
-                const reliability = Math.min(1, targetDay / reliableDays);
-                paceForecast = Math.round(rawPaceForecast * reliability + linearForecast * (1 - reliability));
-            }
+        // ✨ 予測①：曜日パターン基準
+        // 「今日までの実績」はそのまま使い、「残りの日」は曜日ごとの過去実績平均を積み上げる。
+        // 月内の進捗比率だけに頼らないので、新作リリース月など特殊な月に引きずられにくい。
+        let weekdayForecast = currentMonthSalesToDay;
+        for (let d = targetDay + 1; d <= daysInCurrentMonth; d++) {
+            const dow = new Date(targetYear, targetMonth, d).getDay();
+            weekdayForecast += (globalWeekdayAverages[dow] || 0);
         }
-        document.getElementById('projPaceForecast').textContent = `¥${paceForecast.toLocaleString()}`;
+        weekdayForecast = Math.round(weekdayForecast);
+        document.getElementById('projWeekdayForecast').textContent = `¥${weekdayForecast.toLocaleString()}`;
+
+        // ✨ 予測②：直近傾向（重み付け）＋幅
+        // ・全期間を均等平均せず、直近の月ほど重みを大きくする（最大直近6ヶ月）
+        // ・単一の数値ではなく「幅」を出すことで、過去1回だけの突発的な伸びに
+        //   予測全体が引っ張られる「希望的観測」を防ぐ
+        let paceForecast = currentMonthSalesToDay;
+        let paceForecastLow = currentMonthSalesToDay;
+        let paceForecastHigh = currentMonthSalesToDay;
+
+        if (paceRatios.length > 0) {
+            const recentRatios = paceRatios.slice(-6); // 直近最大6ヶ月分（古い→新しいの順で並んでいる）
+            const weights = recentRatios.map((_, i) => i + 1); // 新しい月ほど重みが大きい
+            const weightedSum = recentRatios.reduce((sum, r, i) => sum + r * weights[i], 0);
+            const weightSum = weights.reduce((a, b) => a + b, 0);
+            const weightedAvgRatio = weightSum > 0 ? weightedSum / weightSum : 0;
+
+            const sortedRatios = [...recentRatios].sort((a, b) => a - b);
+            const pick = (p) => {
+                const idx = Math.min(sortedRatios.length - 1, Math.max(0, Math.round((sortedRatios.length - 1) * p)));
+                return sortedRatios[idx];
+            };
+            // サンプルが少ない場合は min/max、多い場合は25/75パーセンタイルで極端な月の影響を緩和
+            const lowRatio = sortedRatios.length >= 4 ? pick(0.75) : sortedRatios[sortedRatios.length - 1];
+            const highRatio = sortedRatios.length >= 4 ? pick(0.25) : sortedRatios[0];
+
+            if (weightedAvgRatio > 0) paceForecast = Math.round(currentMonthSalesToDay / weightedAvgRatio);
+            paceForecastLow = lowRatio > 0 ? Math.round(currentMonthSalesToDay / lowRatio) : paceForecast;
+            paceForecastHigh = highRatio > 0 ? Math.round(currentMonthSalesToDay / highRatio) : paceForecast;
+
+            // 念のため大小を整える
+            if (paceForecastLow > paceForecastHigh) { const tmp = paceForecastLow; paceForecastLow = paceForecastHigh; paceForecastHigh = tmp; }
+        } else {
+            paceForecast = linearForecast;
+            paceForecastLow = linearForecast;
+            paceForecastHigh = linearForecast;
+        }
+        const paceForecastEl = document.getElementById('projPaceForecast');
+        if (paceForecastLow === paceForecastHigh) {
+            paceForecastEl.textContent = `¥${paceForecast.toLocaleString()}`;
+        } else {
+            paceForecastEl.innerHTML = `¥${paceForecast.toLocaleString()}<br><span style="font-size:11px; font-weight:normal; color:#8e44ad;">（¥${paceForecastLow.toLocaleString()} 〜 ¥${paceForecastHigh.toLocaleString()}）</span>`;
+        }
 
         const ctx = document.getElementById('projectionChart').getContext('2d');
         if (charts.projection) {
@@ -1956,30 +2003,6 @@ function rebuildDailyLogTable() {
         });
     }
 
-// 【追加】カテゴリ文字列から表示用バッジ（色・ラベル）を判定する
-function getCategoryBadgeInfo(category) {
-    const c = (category || '').toString();
-    if (c.includes('スタンプ') || c.toLowerCase().includes('sticker')) {
-        return { label: 'スタンプ', bg: '#eaf2f8', color: '#2980b9' };
-    } else if (c.includes('絵文字') || c.toLowerCase().includes('emoji')) {
-        return { label: '絵文字', bg: '#f5eef8', color: '#8e44ad' };
-    } else if (c.includes('着せ替え') || c.includes('着せかえ') || c.toLowerCase().includes('theme')) {
-        return { label: '着せ替え', bg: '#fef5e7', color: '#d35400' };
-    }
-    return { label: c || '不明', bg: '#f2f4f4', color: '#7f8c8d' };
-}
-
-// 【追加】タイトルの文字数に応じて一行に収まるフォントサイズを算出する
-function getFitTitleFontSize(title) {
-    const len = (title || '').length;
-    if (len <= 8) return 14;
-    if (len <= 12) return 13;
-    if (len <= 16) return 12;
-    if (len <= 20) return 11;
-    if (len <= 26) return 10;
-    return 9;
-}
-
 function showDailyDetail(dStr) {
     const detailArea = document.getElementById('daily-detail-area');
     const dateLabel = document.getElementById('selected-date-label');
@@ -2007,36 +2030,13 @@ function showDailyDetail(dStr) {
         const item = dayData[title];
         totalDaySales += item.sales;
         totalDayQty += item.qty;
-
-        // 【追加】種別バッジ
-        const catInfo = getCategoryBadgeInfo(item.category);
-        const catBadgeHtml = `<span style="font-size: 10px; font-weight: bold; color: ${catInfo.color}; background: ${catInfo.bg}; padding: 1px 6px; border-radius: 10px;">${catInfo.label}</span>`;
-
-        // 【追加】販売国バッジ（日本のみ／海外のみ／両方）
-        const hasJapan = (item.japanSales || 0) > 0;
-        const hasOverseas = (item.overseasSales || 0) > 0;
-        let countryLabel = '不明';
-        if (hasJapan && hasOverseas) countryLabel = '🌐 日本+海外';
-        else if (hasJapan) countryLabel = '🇯🇵 日本';
-        else if (hasOverseas) countryLabel = '🌏 海外';
-        const countryBadgeHtml = `<span style="font-size: 10px; font-weight: bold; color: #27ae60; background: #e8f8f5; padding: 1px 6px; border-radius: 10px;">${countryLabel}</span>`;
-
-        // 【追加】お気に入り数（小さく表示。データが無ければ非表示）
-        const favInfo = globalFavoriteData[title];
-        const favBadgeHtml = favInfo ? `<span style="font-size: 10px; font-weight: bold; color: #e67e22; background: #fef5e7; padding: 1px 6px; border-radius: 10px;">⭐ ${favInfo.count.toLocaleString()}</span>` : '';
-
-        // 【追加】文字数の多いタイトルでも折り返さず一行に収まるようフォントサイズを自動調整
-        const titleFontSize = getFitTitleFontSize(title);
         
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #eee';
         tr.innerHTML = `
-            <td style="padding: 10px; max-width: 0; width: 55%;">
-                <div style="font-weight: bold; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: ${titleFontSize}px;" title="${title}">${title}</div>
-                <div style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">${catBadgeHtml}${countryBadgeHtml}${favBadgeHtml}</div>
-            </td>
-            <td style="padding: 10px; text-align: right; color: #666; white-space: nowrap;">${item.qty.toLocaleString()} 個</td>
-            <td style="padding: 10px; text-align: right; font-weight: bold; color: #e74c3c; white-space: nowrap;">¥${item.sales.toLocaleString()}</td>
+            <td style="padding: 10px; font-weight: bold; color: #333;">${title}</td>
+            <td style="padding: 10px; text-align: right; color: #666;">${item.qty.toLocaleString()} 個</td>
+            <td style="padding: 10px; text-align: right; font-weight: bold; color: #e74c3c;">¥${item.sales.toLocaleString()}</td>
         `;
         tableBody.appendChild(tr);
     });
