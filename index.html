@@ -2087,12 +2087,27 @@ function showDailyDetail(dStr) {
         totalDaySales += item.sales;
         totalDayQty += item.qty;
 
-        const categoryLabel = `${getCategoryIcon(item.category)} ${item.category || '不明'}`;
+        const categoryStyleMap = {
+            '絵文字':   { bg: '#eaf2fb', border: '#cfe2f3', color: '#2980b9' },
+            'スタンプ': { bg: '#e8f8f5', border: '#d1f2eb', color: '#16a085' },
+            '着せ替え': { bg: '#f4ecf7', border: '#e8daef', color: '#8e44ad' },
+        };
+        const catKey = Object.keys(categoryStyleMap).find(k => (item.category || '').includes(k));
+        const catStyle = categoryStyleMap[catKey] || { bg: '#f4f6f7', border: '#e5e8e8', color: '#7f8c8d' };
+        const categoryLabel = `<span style="display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:12px; background:${catStyle.bg}; color:${catStyle.color}; border:1px solid ${catStyle.border}; white-space:nowrap;">${getCategoryIcon(item.category)} ${item.category || '不明'}</span>`;
 
         const countryNames = Object.keys(item.countries || {});
+        const countryBadge = (name) => {
+            const isJapan = name === '日本';
+            const bg = isJapan ? '#e8f8f5' : '#fdf2e9';
+            const border = isJapan ? '#d1f2eb' : '#fae5d3';
+            const color = isJapan ? '#27ae60' : '#e67e22';
+            return `<span style="display:inline-flex; align-items:center; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:12px; background:${bg}; color:${color}; border:1px solid ${border}; white-space:nowrap;">${name}</span>`;
+        };
+        const countryTooltip = countryNames.map(c => `${c}: ¥${item.countries[c].sales.toLocaleString()}`).join(' / ');
         const countryLabel = countryNames.length <= 1
-            ? (countryNames[0] || '不明')
-            : countryNames.map(c => `${c}（¥${item.countries[c].sales.toLocaleString()}）`).join('<br>');
+            ? countryBadge(countryNames[0] || '不明')
+            : `<span title="${countryTooltip}" style="display:inline-flex; flex-wrap:wrap; gap:3px; justify-content:center;">${countryNames.map(countryBadge).join('')}</span>`;
 
         const favResult = getFavoriteCountForDate(title, dStr);
         let favLabel;
@@ -2113,8 +2128,8 @@ function showDailyDetail(dStr) {
         tr.style.borderBottom = '1px solid #eee';
         tr.innerHTML = `
             <td style="padding: 10px; font-weight: bold; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; font-size: ${fontSize}px;" title="${title}">${title}</td>
-            <td style="padding: 10px; text-align: center; font-size: 12px; white-space: nowrap;">${categoryLabel}</td>
-            <td style="padding: 10px; text-align: center; font-size: 12px; white-space: nowrap;">${countryLabel}</td>
+            <td style="padding: 8px; text-align: center; white-space: nowrap;">${categoryLabel}</td>
+            <td style="padding: 8px; text-align: center;">${countryLabel}</td>
             <td style="padding: 10px; text-align: center; font-size: 12px;">${favLabel}</td>
             <td style="padding: 10px; text-align: right; color: #666;">${item.qty.toLocaleString()} 個</td>
             <td style="padding: 10px; text-align: right; font-weight: bold; color: #e74c3c;">¥${item.sales.toLocaleString()}</td>
