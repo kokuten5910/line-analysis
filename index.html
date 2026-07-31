@@ -455,6 +455,9 @@
             <thead>
                 <tr style="background-color: #f4f6f9; text-align: left;">
                     <th style="padding: 10px; border-bottom: 2px solid #ddd;">作品名</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;">カテゴリ</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;">国</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;">⭐お気に入り</th>
                     <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">推定個数</th>
                     <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">売上金額</th>
                 </tr>
@@ -804,10 +807,15 @@ function parseFavoriteCSV(text) {
         dailySoldTitlesLog[standardizedDateStr] = {};
     }
     if (!dailySoldTitlesLog[standardizedDateStr][title]) {
-        dailySoldTitlesLog[standardizedDateStr][title] = { sales: 0, qty: 0 };
+        dailySoldTitlesLog[standardizedDateStr][title] = { sales: 0, qty: 0, category: category, countries: {} };
     }
-    dailySoldTitlesLog[standardizedDateStr][title].sales += sales;
-    dailySoldTitlesLog[standardizedDateStr][title].qty += qty;
+    const dailyEntry = dailySoldTitlesLog[standardizedDateStr][title];
+    dailyEntry.sales += sales;
+    dailyEntry.qty += qty;
+    dailyEntry.category = category; // カテゴリは通常同一作品で一定
+    if (!dailyEntry.countries[country]) dailyEntry.countries[country] = { sales: 0, qty: 0 };
+    dailyEntry.countries[country].sales += sales;
+    dailyEntry.countries[country].qty += qty;
             }
         } // ← forループの閉じカッコ
     } // ← parseSalesCSV関数の閉じカッコ
@@ -1753,7 +1761,7 @@ function rebuildDailyLogTable() {
                 
                 let metaText = `¥${p.sales.toLocaleString()} (${p.qty.toLocaleString()}個)`;
                 if (p.overseasSales > 0) {
-                    metaText = `計¥${p.sales.toLocaleString()} [日:¥${p.japanSales.toLocaleString()} / 外:¥${p.overseasSales.toLocaleString()}]`;
+                    metaText = `計¥${p.sales.toLocaleString()} (${p.qty.toLocaleString()}個) [日:¥${p.japanSales.toLocaleString()}(${p.japanQty.toLocaleString()}個) / 外:¥${p.overseasSales.toLocaleString()}(${p.overseasQty.toLocaleString()}個)]`;
                 }
 
                 const releaseLabel = p.releaseDate ? `⏱️ 販売開始: ${p.releaseDate.getFullYear()}/${p.releaseDate.getMonth()+1}/${p.releaseDate.getDate()}` : '⏱️ 販売開始: 不明';
@@ -2003,6 +2011,54 @@ function rebuildDailyLogTable() {
         });
     }
 
+function getCategoryIcon(category) {
+    if (!category) return '❔';
+    const c = category.toString();
+    if (c.includes('絵文字')) return '😀';
+    if (c.includes('着せ替え') || c.includes('着せかえ')) return '👗';
+    if (c.includes('スタンプ')) return '🏷️';
+    return '❔';
+}
+
+function formatDateStrLocal(d) {
+    return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 指定日時点でのお気に入り数を取得（その日の記録がなければ、直近の過去記録を採用）
+// ランキング表示と同じ「前回比」バッジが作れるよう diff も返す
+function getFavoriteCountForDate(title, dStr) {
+    const favInfo = globalFavoriteData[title];
+    if (!favInfo || !favInfo.history || favInfo.history.length === 0) return null;
+
+    const history = favInfo.history; // 日付昇順（parseFavoriteCSVで整列済み）
+
+    let idx = history.findIndex(h => formatDateStrLocal(h.date) === dStr);
+    let isExact = true;
+    if (idx === -1) {
+        isExact = false;
+        const targetDate = parseSafeDate(dStr);
+        for (let i = history.length - 1; i >= 0; i--) {
+            if (history[i].date <= targetDate) { idx = i; break; }
+        }
+    }
+    if (idx === -1) return null;
+
+    const count = history[idx].count;
+    const diff = idx > 0 ? count - history[idx - 1].count : 0;
+    return { count, diff, isExact };
+}
+
+// タイトルの文字数に応じてフォントサイズを調整し、1行に収める
+function getTitleFontSize(title) {
+    const len = (title || '').length;
+    if (len <= 14) return 14;
+    if (len <= 18) return 13;
+    if (len <= 22) return 12;
+    if (len <= 28) return 11;
+    if (len <= 36) return 10;
+    return 9;
+}
+
 function showDailyDetail(dStr) {
     const detailArea = document.getElementById('daily-detail-area');
     const dateLabel = document.getElementById('selected-date-label');
@@ -2016,7 +2072,7 @@ function showDailyDetail(dStr) {
     const dayData = dailySoldTitlesLog[dStr];
     
     if (!dayData || Object.keys(dayData).length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="3" style="padding: 15px; text-align: center; color: #999;">この日の売上データはありません。</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="6" style="padding: 15px; text-align: center; color: #999;">この日の売上データはありません。</td></tr>`;
         detailArea.style.display = 'block';
         return;
     }
@@ -2030,11 +2086,36 @@ function showDailyDetail(dStr) {
         const item = dayData[title];
         totalDaySales += item.sales;
         totalDayQty += item.qty;
+
+        const categoryLabel = `${getCategoryIcon(item.category)} ${item.category || '不明'}`;
+
+        const countryNames = Object.keys(item.countries || {});
+        const countryLabel = countryNames.length <= 1
+            ? (countryNames[0] || '不明')
+            : countryNames.map(c => `${c}（¥${item.countries[c].sales.toLocaleString()}）`).join('<br>');
+
+        const favResult = getFavoriteCountForDate(title, dStr);
+        let favLabel;
+        if (favResult) {
+            const badgeClass = favResult.diff > 0 ? 'rank-favorite-badge increased' : 'rank-favorite-badge';
+            const diffSpan = favResult.diff > 0 ? ` <span class="fav-diff">(+${favResult.diff})</span>` : '';
+            favLabel = `<div class="${badgeClass}" style="display:inline-flex; margin:0 auto;">⭐ ${favResult.count.toLocaleString()}${diffSpan}</div>`;
+            if (!favResult.isExact) {
+                favLabel += `<div style="font-size:9px; color:#bbb; margin-top:2px;">（直近値）</div>`;
+            }
+        } else {
+            favLabel = '<span style="color:#bbb;">-</span>';
+        }
+
+        const fontSize = getTitleFontSize(title);
         
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #eee';
         tr.innerHTML = `
-            <td style="padding: 10px; font-weight: bold; color: #333;">${title}</td>
+            <td style="padding: 10px; font-weight: bold; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; font-size: ${fontSize}px;" title="${title}">${title}</td>
+            <td style="padding: 10px; text-align: center; font-size: 12px; white-space: nowrap;">${categoryLabel}</td>
+            <td style="padding: 10px; text-align: center; font-size: 12px; white-space: nowrap;">${countryLabel}</td>
+            <td style="padding: 10px; text-align: center; font-size: 12px;">${favLabel}</td>
             <td style="padding: 10px; text-align: right; color: #666;">${item.qty.toLocaleString()} 個</td>
             <td style="padding: 10px; text-align: right; font-weight: bold; color: #e74c3c;">¥${item.sales.toLocaleString()}</td>
         `;
@@ -2045,7 +2126,7 @@ function showDailyDetail(dStr) {
     totalTr.style.backgroundColor = '#fff9e6';
     totalTr.style.fontWeight = 'bold';
     totalTr.innerHTML = `
-        <td style="padding: 10px; color: #f39c12;">合計</td>
+        <td colspan="4" style="padding: 10px; color: #f39c12;">合計</td>
         <td style="padding: 10px; text-align: right; color: #333;">${totalDayQty.toLocaleString()} 個</td>
         <td style="padding: 10px; text-align: right; color: #e74c3c;">¥${totalDaySales.toLocaleString()}</td>
     `;
