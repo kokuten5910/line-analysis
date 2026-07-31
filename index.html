@@ -118,6 +118,16 @@
         .badge-gray { background: #f2f4f4; color: #7f8c8d; padding: 2px 6px; border-radius: 10px; font-weight: bold; font-size: 11px; }
         .badge-total { background: #fef5e7; color: #d35400; padding: 2px 6px; border-radius: 10px; font-weight: bold; font-size: 11px; }
 
+        @media (max-width: 600px) {
+            .daily-detail-table, .daily-detail-table thead, .daily-detail-table tbody, .daily-detail-table th, .daily-detail-table td, .daily-detail-table tr { display: block; width: 100%; }
+            .daily-detail-table thead tr { position: absolute; top: -9999px; left: -9999px; }
+            .daily-detail-table tbody tr { border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; padding: 10px 12px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+            .daily-detail-table tbody tr.dd-total-row { background: #fff9e6; border-color: #fdebd0; }
+            .daily-detail-table td { display: flex; justify-content: space-between; align-items: center; padding: 5px 0 !important; border-bottom: none !important; text-align: right !important; white-space: normal !important; max-width: none !important; }
+            .daily-detail-table td[data-label]::before { content: attr(data-label); font-size: 11px; color: #999; font-weight: normal; margin-right: 8px; flex-shrink: 0; }
+            .daily-detail-table td.dd-title { font-size: 15px !important; justify-content: flex-start; padding-bottom: 8px !important; margin-bottom: 4px; border-bottom: 1px solid #f0f0f0 !important; }
+        }
+
         @media (min-width: 768px) {
             body { padding: 15px; }
             h1 { font-size: 26px; }
@@ -451,7 +461,7 @@
         <button onclick="document.getElementById('daily-detail-area').style.display='none'" class="btn-area" style="padding: 4px 8px; font-size: 12px;">閉じる</button>
     </div>
     <div style="overflow-x: auto; margin-top: 10px;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <table class="daily-detail-table" style="width: 100%; border-collapse: collapse; font-size: 14px;">
             <thead>
                 <tr style="background-color: #f4f6f9; text-align: left;">
                     <th style="padding: 10px; border-bottom: 2px solid #ddd;">作品名</th>
@@ -2127,23 +2137,24 @@ function showDailyDetail(dStr) {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #eee';
         tr.innerHTML = `
-            <td style="padding: 10px; font-weight: bold; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; font-size: ${fontSize}px;" title="${title}">${title}</td>
-            <td style="padding: 8px; text-align: center; white-space: nowrap;">${categoryLabel}</td>
-            <td style="padding: 8px; text-align: center;">${countryLabel}</td>
-            <td style="padding: 10px; text-align: center; font-size: 12px;">${favLabel}</td>
-            <td style="padding: 10px; text-align: right; color: #666;">${item.qty.toLocaleString()} 個</td>
-            <td style="padding: 10px; text-align: right; font-weight: bold; color: #e74c3c;">¥${item.sales.toLocaleString()}</td>
+            <td class="dd-title" style="padding: 10px; font-weight: bold; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; font-size: ${fontSize}px;" title="${title}">${title}</td>
+            <td data-label="カテゴリ" style="padding: 8px; text-align: center; white-space: nowrap;">${categoryLabel}</td>
+            <td data-label="国" style="padding: 8px; text-align: center;">${countryLabel}</td>
+            <td data-label="お気に入り" style="padding: 10px; text-align: center; font-size: 12px;">${favLabel}</td>
+            <td data-label="推定個数" style="padding: 10px; text-align: right; color: #666;">${item.qty.toLocaleString()} 個</td>
+            <td data-label="売上金額" style="padding: 10px; text-align: right; font-weight: bold; color: #e74c3c;">¥${item.sales.toLocaleString()}</td>
         `;
         tableBody.appendChild(tr);
     });
     
     const totalTr = document.createElement('tr');
+    totalTr.className = 'dd-total-row';
     totalTr.style.backgroundColor = '#fff9e6';
     totalTr.style.fontWeight = 'bold';
     totalTr.innerHTML = `
-        <td colspan="4" style="padding: 10px; color: #f39c12;">合計</td>
-        <td style="padding: 10px; text-align: right; color: #333;">${totalDayQty.toLocaleString()} 個</td>
-        <td style="padding: 10px; text-align: right; color: #e74c3c;">¥${totalDaySales.toLocaleString()}</td>
+        <td colspan="4" class="dd-title" style="padding: 10px; color: #f39c12;">合計</td>
+        <td data-label="推定個数" style="padding: 10px; text-align: right; color: #333;">${totalDayQty.toLocaleString()} 個</td>
+        <td data-label="売上金額" style="padding: 10px; text-align: right; color: #e74c3c;">¥${totalDaySales.toLocaleString()}</td>
     `;
     tableBody.appendChild(totalTr);
     
