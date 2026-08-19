@@ -390,6 +390,29 @@
                 <div id="heatmapContainer" class="heatmap-box"></div>
             </div>
 
+<div id="daily-detail-area" class="card" style="display: none; margin-top: 20px; grid-column: 1 / -1; text-align: left;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; color: #06C755;"><span id="selected-date-label">2026/05/20</span> の売上内訳</h3>
+        <button onclick="document.getElementById('daily-detail-area').style.display='none'" class="btn-area" style="padding: 4px 8px; font-size: 12px;">閉じる</button>
+    </div>
+    <div style="overflow-x: auto; margin-top: 10px;">
+        <table class="daily-detail-table" style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <thead>
+                <tr style="background-color: #f4f6f9; text-align: left;">
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">作品名</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;" title="カテゴリ">カテゴリ</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;" title="国">国</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;" title="お気に入り数">⭐</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;" title="推定個数">個数</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;" title="売上金額">金額</th>
+                </tr>
+            </thead>
+            <tbody id="daily-detail-table-body">
+                </tbody>
+        </table>
+    </div>
+</div>
+
             <div class="chart-container" id="card-category">
                 <h3>
                     <span>🎨 カテゴリ別売上比率</span>
@@ -443,8 +466,8 @@
                     <span>🗓️ 月別売上構成比（新作比率 vs 過去作ストック比率）</span>
                     <div class="filter-group">
                         <select id="monthCompositionModeFilter" class="month-select">
-                            <option value="same_month">新作判定：同月リリース</option>
-                            <option value="within30">新作判定：リリースから30日以内</option>
+                            <option value="sameMonth" selected>🗓️ 新作＝同月内リリース</option>
+                            <option value="rolling30">📅 新作＝リリースから30日以内</option>
                         </select>
                         <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-month', '月別売上構成比')">📸 保存</button>
                     </div>
@@ -454,8 +477,14 @@
 
             <div class="chart-container" id="card-weekday">
                 <h3>
-                    <span>📅 曜日別 平均売上高</span>
-                    <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-weekday', '曜日別平均売上高')">📸 保存</button>
+                    <span id="weekdayTitle">📅 曜日別 平均売上高</span>
+                    <div class="filter-group">
+                        <select id="weekdayRangeFilter" class="month-select">
+                            <option value="all" selected>📊 全期間</option>
+                            <option value="recent4">🗓️ 直近4週間</option>
+                        </select>
+                        <button class="card-save-btn hide-on-capture" onclick="saveSingleElement('card-weekday', '曜日別平均売上高')">📸 保存</button>
+                    </div>
                 </h3>
                 <canvas id="weekdayChart"></canvas>
             </div>
@@ -470,28 +499,6 @@
                 <ul class="advice-list" id="adviceList"></ul>
             </div>
         </div>
-<div id="daily-detail-area" class="card" style="display: none; margin-top: 20px;">
-    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <h3 style="margin: 0; color: #06C755;"><span id="selected-date-label">2026/05/20</span> の売上内訳</h3>
-        <button onclick="document.getElementById('daily-detail-area').style.display='none'" class="btn-area" style="padding: 4px 8px; font-size: 12px;">閉じる</button>
-    </div>
-    <div style="overflow-x: auto; margin-top: 10px;">
-        <table class="daily-detail-table" style="width: 100%; border-collapse: collapse; font-size: 14px;">
-            <thead>
-                <tr style="background-color: #f4f6f9; text-align: left;">
-                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">作品名</th>
-                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;" title="カテゴリ">カテゴリ</th>
-                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;" title="国">国</th>
-                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;" title="お気に入り数">⭐</th>
-                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;" title="推定個数">個数</th>
-                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;" title="売上金額">金額</th>
-                </tr>
-            </thead>
-            <tbody id="daily-detail-table-body">
-                </tbody>
-        </table>
-    </div>
-</div>
     </div>
 </div>
 <script>
@@ -509,7 +516,6 @@
     const trendTitle = document.getElementById('trendTitle');
     const logMonthFilter = document.getElementById('logMonthFilter');
     const favDiffProductFilter = document.getElementById('favDiffProductFilter');
-    const monthCompositionModeFilter = document.getElementById('monthCompositionModeFilter');
     
     // ✨ chartsオブジェクトに projection を追加しました
     let charts = { ranking: null, trend: null, month: null, weekday: null, category: null, country: null, lifecycle: null, bubble: null, pureMonth: null, projection: null, favoriteTrend: null, favoriteDiff: null };
@@ -531,6 +537,9 @@
 
     let dailySoldTitlesLog = {}; 
     let globalWeekdayAverages = Array(7).fill(0); // ✨ 着地予測（曜日パターン基準）で使用
+    let globalWeekdayAveragesRecent = Array(7).fill(0); // ✨ 直近4週間の曜日別平均（曜日別売上カードの切替用）
+    let globalMonthCompositionSameMonth = { labels: [], newArr: [], oldArr: [] }; // 新作＝同月内リリース
+    let globalMonthCompositionRolling30 = { labels: [], newArr: [], oldArr: [] }; // 新作＝リリースから30日以内
 
     // ✨ カテゴリ別の想定単価（円）
     // スタンプ・絵文字： 実績ベースの平均単価（約52円）
@@ -601,9 +610,10 @@
     trendProductFilter.addEventListener('change', () => { updateTrendChartOnly(); }); 
     trendUnitFilter.addEventListener('change', () => { updateTrendChartOnly(); });
     trendMetricFilter.addEventListener('change', () => { updateTrendChartOnly(); });
+    document.getElementById('weekdayRangeFilter').addEventListener('change', () => { updateWeekdayChartOnly(); });
+    document.getElementById('monthCompositionModeFilter').addEventListener('change', () => { updateMonthCompositionChartOnly(); });
     trendMonthFilter.addEventListener('change', () => { updateTrendChartOnly(); });
     logMonthFilter.addEventListener('change', () => { rebuildDailyLogTable(); });
-    monthCompositionModeFilter.addEventListener('change', () => { renderMonthCompositionChart(); });
 
     function handleMultipleFiles(files) {
         let filesProcessed = 0;
@@ -877,6 +887,20 @@ function parseFavoriteCSV(text) {
 
         const weekdayAverages = weekdaySales.map((s, i) => weekdayCounts[i] > 0 ? Math.round(s / weekdayCounts[i]) : 0);
         globalWeekdayAverages = weekdayAverages;
+
+        // ✨ 直近4週間（28日）の曜日別平均も算出
+        const recentWeekdaySales = Array(7).fill(0); const recentWeekdayCounts = Array(7).fill(0);
+        let recentStart = new Date(endDate);
+        recentStart.setDate(recentStart.getDate() - 27);
+        if (recentStart < startDate) recentStart = new Date(startDate);
+        let rc = new Date(recentStart);
+        while (rc <= endDate) {
+            const rdStr = `${rc.getFullYear()}/${String(rc.getMonth()+1).padStart(2, '0')}/${String(rc.getDate()).padStart(2, '0')}`;
+            const rs = globalDateData[rdStr] || 0;
+            recentWeekdaySales[rc.getDay()] += rs; recentWeekdayCounts[rc.getDay()] += 1;
+            rc.setDate(rc.getDate() + 1);
+        }
+        globalWeekdayAveragesRecent = recentWeekdaySales.map((s, i) => recentWeekdayCounts[i] > 0 ? Math.round(s / recentWeekdayCounts[i]) : 0);
 
         document.getElementById('captureArea').style.display = 'block';
         document.getElementById('totalSales').textContent = `¥${totalSales.toLocaleString()}`;
@@ -1266,6 +1290,39 @@ function rebuildDailyLogTable() {
             tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#95a5a6;">該当期間に売上データはありません</td></tr>`;
         }
 
+    function updateWeekdayChartOnly() {
+        if (!charts.weekday) return;
+        const rangeFilterEl = document.getElementById('weekdayRangeFilter');
+        const range = rangeFilterEl ? rangeFilterEl.value : 'all';
+        const data = range === 'recent4' ? globalWeekdayAveragesRecent : globalWeekdayAverages;
+
+        let maxVal = -1, maxIdx = -1;
+        data.forEach((v, i) => { if (v > maxVal) { maxVal = v; maxIdx = i; } });
+        const bgColors = data.map((_, i) => i === maxIdx ? '#06C755' : '#bdc3c7');
+
+        charts.weekday.data.datasets[0].data = data;
+        charts.weekday.data.datasets[0].backgroundColor = bgColors;
+        charts.weekday.data.datasets[0].label = range === 'recent4' ? '平均売上（直近4週間）' : '平均売上（全期間）';
+        charts.weekday.update();
+
+        const titleEl = document.getElementById('weekdayTitle');
+        if (titleEl) titleEl.textContent = range === 'recent4' ? '📅 曜日別 平均売上高（直近4週間）' : '📅 曜日別 平均売上高';
+    }
+
+    function updateMonthCompositionChartOnly() {
+        if (!charts.month) return;
+        const modeFilterEl = document.getElementById('monthCompositionModeFilter');
+        const mode = modeFilterEl ? modeFilterEl.value : 'sameMonth';
+        const src = mode === 'rolling30' ? globalMonthCompositionRolling30 : globalMonthCompositionSameMonth;
+        const newLabel = mode === 'rolling30' ? '新作（リリースから30日以内）' : '新作（同月内リリース）';
+
+        charts.month.data.labels = src.labels;
+        charts.month.data.datasets[0].data = src.newArr;
+        charts.month.data.datasets[0].label = newLabel;
+        charts.month.data.datasets[1].data = src.oldArr;
+        charts.month.update();
+    }
+
     function updateTrendChartOnly() {
         if (!rawDates.length || !charts.trend) return;
         
@@ -1501,6 +1558,7 @@ function rebuildDailyLogTable() {
             type: 'bar', data: { labels: ['日','月','火','水','木','金','土'], datasets: [{ label: '平均売上', data: weekdayAverages, backgroundColor: ['#e74c3c','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#bdc3c7','#06C755'], borderRadius: 4 }] },
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
+        updateWeekdayChartOnly();
 
         const cLabels = Object.keys(categoryData);
         charts.category = new Chart(document.getElementById('categoryChart').getContext('2d'), { type: 'doughnut', data: { labels: cLabels, datasets: [{ data: cLabels.map(c => categoryData[c]), backgroundColor: ['#2ecc71', '#e67e22'] }] }, options: { responsive: true, maintainAspectRatio: false } });
@@ -1623,33 +1681,6 @@ function rebuildDailyLogTable() {
             }
         });
 
-        const pureMonthInit = computeMonthCompositionData('same_month');
-        charts.pureMonth = new Chart(document.getElementById('pureMonthChart').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: pureMonthInit.allMonths,
-                datasets: [{
-                    label: '月間総売上（円）',
-                    data: pureMonthInit.pureMonthSales,
-                    backgroundColor: 'rgba(52, 152, 219, 0.75)',
-                    borderColor: '#3498db',
-                    borderWidth: 1,
-                    borderRadius: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true, ticks: { callback: (v) => `¥${v.toLocaleString()}` } } }
-            }
-        });
-
-        renderMonthCompositionChart();
-    }
-
-    // 🆕 「同月リリース」と「リリースから30日以内」の2つの基準で
-    // 月別の新作比率／過去作ストック比率を集計する
-    function computeMonthCompositionData(mode) {
         const allMonths = Object.keys(monthlyProductTotals).sort();
         const pureMonthSales = [];
         const newProductSalesByMonth = [];
@@ -1662,7 +1693,6 @@ function rebuildDailyLogTable() {
 
             const match = mKey.match(/(\d+)年(\d+)月/);
             const currentMonthStart = match ? new Date(parseInt(match[1]), parseInt(match[2]) - 1, 1) : null;
-            const monthPrefix = match ? `${match[1]}/${String(parseInt(match[2])).padStart(2, '0')}/` : null;
 
             const currentMonthProducts = monthlyProductTotals[mKey];
             Object.keys(currentMonthProducts).forEach(title => {
@@ -1670,44 +1700,15 @@ function rebuildDailyLogTable() {
                 monthTotal += prodSales;
                 const shopInfo = globalShopData[title];
 
-                if (!shopInfo || !shopInfo.releaseDate || !currentMonthStart) {
-                    oldSales += prodSales;
-                    return;
-                }
-
-                const rDate = shopInfo.releaseDate;
-
-                if (mode === 'within30') {
-                    // リリースから30日以内（日単位）に該当する売上だけを新作売上として集計
-                    const dailyMap = globalProductDateData[title] || {};
-                    let titleNew = 0;
-                    let titleOld = 0;
-                    Object.keys(dailyMap).forEach(dStr => {
-                        if (!dStr.startsWith(monthPrefix)) return;
-                        const amt = dailyMap[dStr] || 0;
-                        const parts = dStr.split('/');
-                        const dObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-                        const diffDays = Math.floor((dObj - rDate) / (1000 * 60 * 60 * 24));
-                        if (diffDays >= 0 && diffDays < 30) titleNew += amt;
-                        else titleOld += amt;
-                    });
-
-                    const sumCheck = titleNew + titleOld;
-                    if (sumCheck === 0) {
-                        // 日別データが見つからない場合は過去作扱いにフォールバック
-                        oldSales += prodSales;
-                    } else {
-                        newSales += titleNew;
-                        // 端数や集計単位の誤差はストック側に丸めて吸収する
-                        oldSales += titleOld + (prodSales - sumCheck);
-                    }
-                } else {
-                    // 同月リリース基準：リリース月と同じ月内の売上をすべて新作扱い
+                if (shopInfo && shopInfo.releaseDate && currentMonthStart) {
+                    const rDate = shopInfo.releaseDate;
                     if (rDate.getFullYear() === currentMonthStart.getFullYear() && rDate.getMonth() === currentMonthStart.getMonth()) {
                         newSales += prodSales;
                     } else {
                         oldSales += prodSales;
                     }
+                } else {
+                    oldSales += prodSales;
                 }
             });
 
@@ -1722,33 +1723,75 @@ function rebuildDailyLogTable() {
             }
         });
 
-        return { allMonths, pureMonthSales, newProductSalesByMonth, oldProductSalesByMonth };
-    }
+        globalMonthCompositionSameMonth = { labels: allMonths, newArr: newProductSalesByMonth, oldArr: oldProductSalesByMonth };
 
-    // 🆕 選択された集計モードに応じて月別売上構成比チャートを再描画
-    function renderMonthCompositionChart() {
-        if (!Object.keys(monthlyProductTotals).length) return;
+        // ✨ 新作の定義を「リリースから30日以内の売上」とした場合の月別構成比
+        // （月境界をまたいでも、リリース日から30日間はずっと「新作」として扱う）
+        const monthly30 = {};
+        allMonths.forEach(m => { monthly30[m] = { total: 0, newS: 0, oldS: 0 }; });
 
-        const mode = monthCompositionModeFilter ? monthCompositionModeFilter.value : 'same_month';
-        const data = computeMonthCompositionData(mode);
-        const newLabel = mode === 'within30' ? '新作（リリースから30日以内）' : '新作（同月内リリース）';
+        Object.keys(globalProductDateData).forEach(title => {
+            const shopInfo = globalShopData[title];
+            const dateMap = globalProductDateData[title];
+            Object.keys(dateMap).forEach(dStr => {
+                const sales = dateMap[dStr];
+                if (!sales) return;
+                const dObj = parseSafeDate(dStr);
+                const mKey30 = `${dObj.getFullYear()}年${String(dObj.getMonth() + 1).padStart(2, '0')}月`;
+                if (!monthly30[mKey30]) monthly30[mKey30] = { total: 0, newS: 0, oldS: 0 };
+                monthly30[mKey30].total += sales;
 
-        if (charts.month) {
-            charts.month.data.labels = data.allMonths;
-            charts.month.data.datasets[0].data = data.newProductSalesByMonth;
-            charts.month.data.datasets[0].label = newLabel;
-            charts.month.data.datasets[1].data = data.oldProductSalesByMonth;
-            charts.month.update();
-            return;
-        }
+                if (shopInfo && shopInfo.releaseDate) {
+                    const daysDiff = Math.floor((dObj - shopInfo.releaseDate) / (1000 * 60 * 60 * 24));
+                    if (daysDiff >= 0 && daysDiff < 30) {
+                        monthly30[mKey30].newS += sales;
+                    } else {
+                        monthly30[mKey30].oldS += sales;
+                    }
+                } else {
+                    monthly30[mKey30].oldS += sales;
+                }
+            });
+        });
+
+        const newProductSalesByMonth30 = allMonths.map(m => {
+            const d = monthly30[m] || { total: 0, newS: 0, oldS: 0 };
+            return d.total > 0 ? Math.round((d.newS / d.total) * 100) : 0;
+        });
+        const oldProductSalesByMonth30 = allMonths.map(m => {
+            const d = monthly30[m] || { total: 0, newS: 0, oldS: 0 };
+            return d.total > 0 ? Math.round((d.oldS / d.total) * 100) : 0;
+        });
+
+        globalMonthCompositionRolling30 = { labels: allMonths, newArr: newProductSalesByMonth30, oldArr: oldProductSalesByMonth30 };
+
+        charts.pureMonth = new Chart(document.getElementById('pureMonthChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: allMonths,
+                datasets: [{
+                    label: '月間総売上（円）',
+                    data: pureMonthSales,
+                    backgroundColor: 'rgba(52, 152, 219, 0.75)',
+                    borderColor: '#3498db',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, ticks: { callback: (v) => `¥${v.toLocaleString()}` } } }
+            }
+        });
 
         charts.month = new Chart(document.getElementById('monthChart').getContext('2d'), {
             type: 'bar',
             data: {
-                labels: data.allMonths,
+                labels: allMonths,
                 datasets: [
-                    { label: newLabel, data: data.newProductSalesByMonth, backgroundColor: '#06C755' },
-                    { label: '過去作（ストック資産）', data: data.oldProductSalesByMonth, backgroundColor: '#bdc3c7' }
+                    { label: '新作（同月内リリース）', data: newProductSalesByMonth, backgroundColor: '#06C755' },
+                    { label: '過去作（ストック資産）', data: oldProductSalesByMonth, backgroundColor: '#bdc3c7' }
                 ]
             },
             options: {
@@ -1758,6 +1801,7 @@ function rebuildDailyLogTable() {
                 scales: { x: { stacked: true }, y: { stacked: true, max: 100, ticks: { callback: (v) => `${v}%` } } }
             }
         });
+        updateMonthCompositionChartOnly();
     }
 
    function updateRankingChart() {
